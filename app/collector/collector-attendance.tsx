@@ -1,0 +1,889 @@
+import {
+  Badge,
+  BadgeText,
+  Box,
+  Button,
+  ButtonText,
+  Card,
+  HStack,
+  ScrollView,
+  Text,
+  useToast,
+  VStack,
+  Modal,
+  ModalBackdrop,
+  ModalContent,
+  ModalHeader,
+  ModalCloseButton,
+  ModalBody,
+  ModalFooter,
+  Icon,
+  CloseIcon,
+} from "@gluestack-ui/themed";
+import { useRouter } from "expo-router";
+import {
+  Clock,
+  Play,
+  Square,
+  MapPin,
+  Truck,
+  Calendar,
+  User,
+  Info,
+} from "lucide-react-native";
+import * as Location from "expo-location";
+import React, { useContext, useEffect, useState } from "react";
+import { AppToast } from "@/components/ui/AppToast";
+import { AuthContext } from "@/context/AuthContext";
+import { useFocusEffect } from "@react-navigation/native";
+import { Pressable } from "react-native";
+
+import {
+  checkAttendanceSpecificUser,
+  getAllAttendanceSpecificUser,
+  createAttendanceTimeIn,
+  updateAttendanceTimeOut,
+} from "../../hooks/attendance_hook";
+
+import { updateTruckStatus } from "../../hooks/truck_hook";
+import { getTodayScheduleSpecificUser } from "../../hooks/schedule_hook";
+
+import { useLocation } from '@/context/LocationContext';
+
+
+export interface AttendanceData {
+  _id: string;
+  user: any;
+  truck: any;
+  schedule: any;
+  flag: number;
+  started_at: string;
+  ended_at: string;
+  created_at: string;
+  [key: string]: any;
+}
+
+export interface ScheduleData {
+  _id: string;
+  [key: string]: any;
+}
+interface LocationData {
+  latitude: number;
+  longitude: number;
+}
+export default function CollectorAttendanceScreen() {
+  const { user } = useContext(AuthContext)!;
+  const router = useRouter();
+  const toast = useToast();
+  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceData[]>([]);
+  const [scheduleRecords, setScheduleRecords] = useState<ScheduleData[]>([]);
+  const [currentAttendance, setCurrentAttendance] = useState<AttendanceData | null>(null);
+  const [isClockedIn, setIsClockedIn] = useState(false);
+  const [showClockModal, setShowClockModal] = useState(false);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [selectedAttendance, setSelectedAttendance] = useState<AttendanceData | null>(null);
+  const [clockAction, setClockAction] = useState<"in" | "out">("in");
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [location, setLocation] = useState<LocationData | null>(null);
+  const { connectWebSocket, fetchTodayScheduleRecords } = useLocation();
+
+
+  useFocusEffect(
+    React.useCallback(() => {
+      checkCurrentAttendance();
+      fetchAttendanceRecords();
+      fetchTodayScheduleRecordsMain();
+      connectWebSocket();
+      fetchTodayScheduleRecords();
+    }, [])
+  );
+
+  const fetchTodayScheduleRecordsMain = async () => {
+    try {
+      const { data, success } = await getTodayScheduleSpecificUser(
+        user?._id || ""
+      );
+
+      if (success === true) {
+        setScheduleRecords(data.data);
+      }
+    } catch (error) {
+      toast.show({
+        placement: "top right",
+        render: ({ id }) => (
+          <AppToast
+            id={id}
+            type="error"
+            title="Error"
+            description="Failed to load schedule records."
+          />
+        ),
+      });
+    }
+  };
+
+  const fetchAttendanceRecords = async () => {
+    try {
+      const { data, success } = await getAllAttendanceSpecificUser(
+        user?._id || ""
+      );
+
+      if (success === true) {
+        setAttendanceRecords(data.data);
+      }
+    } catch (error) {
+      toast.show({
+        placement: "top right",
+        render: ({ id }) => (
+          <AppToast
+            id={id}
+            type="error"
+            title="Error"
+            description="Failed to load attendance records."
+          />
+        ),
+      });
+    }
+  };
+
+  const checkCurrentAttendance = async () => {
+    try {
+      const { data, success } = await checkAttendanceSpecificUser(
+        user?._id || ""
+      );
+
+      if (success === true) {
+        if (data?.data?.flag === 1) {
+          setIsClockedIn(true);
+          setCurrentAttendance(data?.data?.attendances);
+        }
+        if (data?.data?.flag === 0 || data?.data === 0) {
+          setIsClockedIn(false);
+          setCurrentAttendance(null);
+        }
+      }
+    } catch (error) {
+      console.error("Error checking current attendance:", error);
+    }
+  };
+
+  const getCurrentLocation = async (): Promise<LocationData | null> => {
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+
+      if (status !== "granted") {
+        setError("Permission to access location was denied");
+        return null;
+      }
+
+      const currentLocation = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      const locationData: LocationData = {
+        latitude: currentLocation.coords.latitude,
+        longitude: currentLocation.coords.longitude,
+      };
+
+      // setLocation(locationData);
+      return locationData;
+    } catch (error) {
+      console.error("Error getting location:", error);
+      setError((error as Error).message);
+      return null;
+    }
+  };
+
+  const handleClockIn = async () => {
+    if (isProcessing) return; // Prevent multiple clicks
+    setIsProcessing(true);
+
+    const locationExtract = await getCurrentLocation();
+
+    try {
+      const input_data = {
+        user: user?._id || "",
+        truck: scheduleRecords?.[0]?.truck?._id || "",
+        schedule: scheduleRecords?.[0]?._id || "",
+        started_at: getCurrentDateTime(),
+        latitude: locationExtract?.latitude,
+        longitude: locationExtract?.longitude,
+      };
+
+      const input_data2 = {
+        status: "On Route",
+      };
+
+      const { data, success } = await createAttendanceTimeIn(input_data);
+
+      if (success === true) {
+        const response = await updateTruckStatus(data.data.truck._id || "", input_data2);
+
+        if (response.success === true) {
+          setCurrentAttendance(data.data);
+          setIsClockedIn(true);
+          setShowClockModal(false);
+          fetchAttendanceRecords();
+          toast.show({
+            placement: "top right",
+            render: ({ id }) => (
+              <AppToast
+                id={id}
+                type="success"
+                title="Clocked In"
+                description="Successfully started your shift"
+              />
+            ),
+          });
+        }
+      }
+    } catch (error) {
+      console.log(123);
+      console.log(error);
+      toast.show({
+        placement: "top right",
+        render: ({ id }) => (
+          <AppToast
+            id={id}
+            type="error"
+            title="Error"
+            description="Failed to clock in"
+          />
+        ),
+      });
+    } finally {
+      setIsProcessing(false); // Re-enable button
+    }
+  };
+
+  const handleClockOut = async () => {
+    if (isProcessing) return; // Prevent multiple clicks
+    setIsProcessing(true);
+
+    const locationExtract = await getCurrentLocation();
+
+    try {
+      const input_data = {
+        ended_at: getCurrentDateTime(),
+        latitude: locationExtract?.latitude,
+        longitude: locationExtract?.longitude,
+      };
+
+      const input_data2 = {
+        status: "Active",
+      };
+
+
+      const { data, success } = await updateAttendanceTimeOut(user?._id || "", input_data);
+
+      if (success === true) {
+        const response = await updateTruckStatus(data.data.truck._id || "", input_data2);
+
+        if (response.success === true) {
+          setCurrentAttendance(null);
+          setIsClockedIn(false);
+          setShowClockModal(false);
+          fetchAttendanceRecords();
+          toast.show({
+            placement: "top right",
+            render: ({ id }) => (
+              <AppToast
+                id={id}
+                type="success"
+                title="Clocked Out"
+                description="Successfully ended your shift"
+              />
+            ),
+          });
+        }
+      }
+    } catch (error) {
+      console.log(error);
+      toast.show({
+        placement: "top right",
+        render: ({ id }) => (
+          <AppToast
+            id={id}
+            type="error"
+            title="Error"
+            description="Failed to clock out"
+          />
+        ),
+      });
+    } finally {
+      setIsProcessing(false); // Re-enable button
+    }
+  };
+
+  const openClockModal = (action: "in" | "out") => {
+    setClockAction(action);
+    setShowClockModal(true);
+  };
+
+  const handleAttendancePress = (attendance: AttendanceData) => {
+    setSelectedAttendance(attendance);
+    setShowDetailsModal(true);
+  };
+
+  const handleCloseDetailsModal = () => {
+    setShowDetailsModal(false);
+    setSelectedAttendance(null);
+  };
+
+  const formatDateTime = (dateString: string) => {
+    if (!dateString) return "Not set";
+    const date = new Date(dateString);
+    return date.toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  const formatTime = (dateString: string) => {
+    if (!dateString) return "";
+    const date = new Date(dateString);
+    return date.toLocaleTimeString("en-US", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  const formatDate = (dateString: string | undefined) => {
+    if (!dateString) return "Date not available";
+    return new Date(dateString).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+  };
+
+  const calculateDuration = (start: string, end: string) => {
+    if (!start || !end) return "N/A";
+    const startTime = new Date(start).getTime();
+    const endTime = new Date(end).getTime();
+    const durationMs = endTime - startTime;
+    const hours = Math.floor(durationMs / (1000 * 60 * 60));
+    const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
+    return `${hours}h ${minutes}m`;
+  };
+
+  const getShiftStatus = (attendance: AttendanceData) => {
+    if (!attendance.ended_at) return "active";
+    return "completed";
+  };
+
+  const getStatusColors = (status: string) => {
+    switch (status?.toLowerCase()) {
+      case "completed":
+        return { bg: "$green100", text: "$green600" };
+      case "active":
+        return { bg: "$blue100", text: "$blue600" };
+      default:
+        return { bg: "$gray100", text: "$gray600" };
+    }
+  };
+
+  const formatText = (text: string | undefined): string => {
+    if (!text) return "";
+    return text
+      .toLowerCase()
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+  };
+
+  function getCurrentDateTime(): string {
+    const now = new Date();
+
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    const hours = String(now.getHours()).padStart(2, "0");
+    const minutes = String(now.getMinutes()).padStart(2, "0");
+    const seconds = String(now.getSeconds()).padStart(2, "0");
+
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+  }
+
+  return (
+    <Box flex={1} bg="$white">
+      <ScrollView flex={1}>
+        <VStack space="lg" p="$4">
+          {/* Current Shift Status */}
+          <Card bg={isClockedIn ? "$green50" : "$blue50"} p="$4">
+            <VStack space="md" alignItems="center">
+              <HStack space="sm" alignItems="center">
+                <Clock size={24} color={isClockedIn ? "#22c55e" : "#3b82f6"} />
+                <Text
+                  size="xl"
+                  fontWeight="$bold"
+                  color={isClockedIn ? "$green600" : "$blue600"}
+                >
+                  {isClockedIn ? "Currently On Shift" : "Not Clocked In"}
+                </Text>
+              </HStack>
+
+              {isClockedIn && currentAttendance && (
+                <VStack space="xs" alignItems="center" width="$full">
+                  <Text color="$secondary500" textAlign="center">
+                    Started: {formatTime(currentAttendance.started_at)}
+                  </Text>
+                  <HStack space="md" justifyContent="center" width="$full">
+                    <VStack alignItems="center">
+                      <Truck size={16} color="#666" />
+                      <Text size="sm" color="$secondary500">
+                        {currentAttendance.truck?.truck_id || "N/A"}
+                      </Text>
+                    </VStack>
+                    <VStack alignItems="center">
+                      <MapPin size={16} color="#666" />
+                      <Text size="sm" color="$secondary500">
+                        {currentAttendance?.schedule?.route?.route_name ||
+                          "N/A"}
+                      </Text>
+                    </VStack>
+                  </HStack>
+                </VStack>
+              )}
+
+              <Button
+                onPress={() => openClockModal(isClockedIn ? "out" : "in")}
+                bg={isClockedIn ? "$red500" : "$green500"}
+                size="lg"
+                width="$full"
+                isDisabled={scheduleRecords.length === 0}
+              >
+                <HStack space="sm" alignItems="center">
+                  {isClockedIn ? (
+                    <Square size={20} color="white" />
+                  ) : (
+                    <Play size={20} color="white" />
+                  )}
+                  <ButtonText>
+                    {isClockedIn ? "Clock Out" : "Clock In"}
+                  </ButtonText>
+                </HStack>
+              </Button>
+            </VStack>
+          </Card>
+
+          {/* Attendance History */}
+          <Box>
+            <Text size="xl" fontWeight="$bold" mb="$2">
+              Attendance History ({attendanceRecords.length})
+            </Text>
+            <Text color="$secondary500">Your previous shift records</Text>
+          </Box>
+
+          <VStack space="md">
+            {attendanceRecords.map((record) => (
+              <Pressable
+                key={record._id}
+                onPress={() => handleAttendancePress(record)}
+              >
+                <Card p="$3">
+                  <VStack space="sm">
+                    <HStack
+                      justifyContent="space-between"
+                      alignItems="flex-start"
+                    >
+                      <VStack space="xs" flex={1}>
+                        <HStack space="sm" alignItems="center">
+                          <Calendar size={16} color="#666" />
+                          <Text fontWeight="$bold">
+                            {formatDateTime(record.started_at)}
+                          </Text>
+                        </HStack>
+                        <HStack space="md">
+                          <HStack space="xs" alignItems="center">
+                            <Truck size={14} color="#666" />
+                            <Text size="sm" color="$secondary500">
+                              {record.truck?.truck_id || "N/A"}
+                            </Text>
+                          </HStack>
+                          <HStack space="xs" alignItems="center">
+                            <MapPin size={14} color="#666" />
+                            <Text size="sm" color="$secondary500">
+                              {record?.schedule?.route?.route_name || "N/A"}
+                            </Text>
+                          </HStack>
+                        </HStack>
+                      </VStack>
+                      <Badge
+                        bg={
+                          getShiftStatus(record) === "completed"
+                            ? "$green100"
+                            : "$blue100"
+                        }
+                        rounded="$full"
+                      >
+                        <BadgeText
+                          color={
+                            getShiftStatus(record) === "completed"
+                              ? "$green600"
+                              : "$blue600"
+                          }
+                          size="xs"
+                        >
+                          {getShiftStatus(record) === "completed"
+                            ? "Completed"
+                            : "Active"}
+                        </BadgeText>
+                      </Badge>
+                    </HStack>
+
+                    <HStack justifyContent="space-between">
+                      <Text size="sm" color="$secondary500">
+                        Start: {formatTime(record.started_at)}
+                      </Text>
+                      <Text size="sm" color="$secondary500">
+                        End:{" "}
+                        {record.ended_at
+                          ? formatTime(record.ended_at)
+                          : "In Progress"}
+                      </Text>
+                    </HStack>
+
+                    {record.ended_at && (
+                      <HStack
+                        justifyContent="space-between"
+                        alignItems="center"
+                      >
+                        <Text size="sm" color="$secondary500">
+                          Duration:
+                        </Text>
+                        <Text size="sm" fontWeight="$bold" color="$primary600">
+                          {calculateDuration(
+                            record.started_at,
+                            record.ended_at
+                          )}
+                        </Text>
+                      </HStack>
+                    )}
+                  </VStack>
+                </Card>
+              </Pressable>
+            ))}
+          </VStack>
+
+          {attendanceRecords.length === 0 && (
+            <Card p="$4" bg="$gray100">
+              <Text textAlign="center" color="$secondary500">
+                No attendance records found
+              </Text>
+            </Card>
+          )}
+        </VStack>
+      </ScrollView>
+
+      {/* Clock In/Out Confirmation Modal */}
+      <Modal isOpen={showClockModal} onClose={() => setShowClockModal(false)}>
+        <ModalBackdrop />
+        <ModalContent>
+          <ModalHeader>
+            <VStack space="xs">
+              <Text size="lg" fontWeight="$bold">
+                {clockAction === "in" ? "Clock In" : "Clock Out"}
+              </Text>
+              <Text size="sm" color="$secondary500">
+                Confirm your shift {clockAction === "in" ? "start" : "end"}
+              </Text>
+            </VStack>
+            <ModalCloseButton>
+              <Icon as={CloseIcon} />
+            </ModalCloseButton>
+          </ModalHeader>
+          <ModalBody>
+            <VStack space="md">
+              <Text>
+                Are you sure you want to{" "}
+                {clockAction === "in" ? "start" : "end"} your shift?
+              </Text>
+              {clockAction === "in" && (
+                <VStack space="xs">
+                  <HStack justifyContent="space-between">
+                    <Text color="$secondary500">Truck:</Text>
+                    <Text fontWeight="$medium">
+                      {scheduleRecords?.[0]?.truck?.truck_id || "N/A"}
+                    </Text>
+                  </HStack>
+                  <HStack justifyContent="space-between">
+                    <Text color="$secondary500">Route:</Text>
+                    <Text fontWeight="$medium">
+                      {scheduleRecords?.[0]?.route?.route_name || "N/A"}
+                    </Text>
+                  </HStack>
+                </VStack>
+              )}
+            </VStack>
+          </ModalBody>
+          <ModalFooter>
+            <HStack space="sm" flex={1}>
+              <Button
+                variant="outline"
+                action="secondary"
+                onPress={() => setShowClockModal(false)}
+                flex={1}
+              >
+                <ButtonText>Cancel</ButtonText>
+              </Button>
+              <Button
+                onPress={clockAction === "in" ? handleClockIn : handleClockOut}
+                bg={clockAction === "in" ? "$green500" : "$red500"}
+                flex={1}
+                isDisabled={isProcessing || scheduleRecords.length === 0}
+              >
+                <ButtonText>
+                  {isProcessing
+                    ? "Processing..."
+                    : clockAction === "in"
+                    ? "Clock In"
+                    : "Clock Out"}
+                </ButtonText>
+              </Button>
+            </HStack>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Attendance Details Modal */}
+      <Modal
+        isOpen={showDetailsModal}
+        onClose={handleCloseDetailsModal}
+        size="full"
+      >
+        <ModalBackdrop />
+        <ModalContent maxHeight="90%" minHeight="85%">
+          <ModalHeader>
+            <VStack space="xs">
+              <Text size="lg" fontWeight="$bold">
+                Attendance Details
+              </Text>
+              <Text size="sm" color="$secondary500">
+                Shift Information
+              </Text>
+            </VStack>
+            <ModalCloseButton>
+              <Icon as={CloseIcon} />
+            </ModalCloseButton>
+          </ModalHeader>
+
+          <ModalBody flex={1}>
+            <ScrollView
+              flex={1}
+              showsVerticalScrollIndicator={true}
+              contentContainerStyle={{ flexGrow: 1 }}
+            >
+              {selectedAttendance && (
+                <VStack space="lg" pb="$4">
+                  {/* Shift Information */}
+                  <VStack space="md">
+                    <HStack space="sm" alignItems="center">
+                      <Clock size={18} color="#666" />
+                      <Text fontWeight="$bold" size="md">
+                        Shift Information
+                      </Text>
+                    </HStack>
+                    <HStack justifyContent="space-between">
+                      <Text color="$secondary500">Status:</Text>
+                      <Badge
+                        bg={
+                          getStatusColors(getShiftStatus(selectedAttendance)).bg
+                        }
+                        rounded="$full"
+                      >
+                        <BadgeText
+                          color={
+                            getStatusColors(getShiftStatus(selectedAttendance))
+                              .text
+                          }
+                          size="xs"
+                        >
+                          {formatText(getShiftStatus(selectedAttendance))}
+                        </BadgeText>
+                      </Badge>
+                    </HStack>
+                    <HStack justifyContent="space-between">
+                      <Text color="$secondary500">Start Time:</Text>
+                      <Text fontWeight="$medium">
+                        {formatDateTime(selectedAttendance.started_at)}
+                      </Text>
+                    </HStack>
+                    <HStack justifyContent="space-between">
+                      <Text color="$secondary500">End Time:</Text>
+                      <Text fontWeight="$medium">
+                        {selectedAttendance.ended_at
+                          ? formatDateTime(selectedAttendance.ended_at)
+                          : "In Progress"}
+                      </Text>
+                    </HStack>
+                    {selectedAttendance.ended_at && (
+                      <HStack justifyContent="space-between">
+                        <Text color="$secondary500">Duration:</Text>
+                        <Text fontWeight="$medium" color="$primary600">
+                          {calculateDuration(
+                            selectedAttendance.started_at,
+                            selectedAttendance.ended_at
+                          )}
+                        </Text>
+                      </HStack>
+                    )}
+                  </VStack>
+
+                  {/* Truck Information */}
+                  <VStack space="md">
+                    <HStack space="sm" alignItems="center">
+                      <Truck size={18} color="#666" />
+                      <Text fontWeight="$bold" size="md">
+                        Truck Information
+                      </Text>
+                    </HStack>
+                    <HStack justifyContent="space-between">
+                      <Text color="$secondary500">Truck ID:</Text>
+                      <Text fontWeight="$medium">
+                        {selectedAttendance.truck?.truck_id || "N/A"}
+                      </Text>
+                    </HStack>
+                    <HStack justifyContent="space-between">
+                      <Text color="$secondary500">Truck Status:</Text>
+                      <Text fontWeight="$medium">
+                        {formatText(selectedAttendance.truck?.status)}
+                      </Text>
+                    </HStack>
+                  </VStack>
+
+                  {/* Schedule Information */}
+                  <VStack space="md">
+                    <HStack space="sm" alignItems="center">
+                      <Calendar size={18} color="#666" />
+                      <Text fontWeight="$bold" size="md">
+                        Schedule Information
+                      </Text>
+                    </HStack>
+                    <HStack justifyContent="space-between">
+                      <Text color="$secondary500">Route:</Text>
+                      <Text fontWeight="$medium">
+                        {selectedAttendance.schedule?.route?.route_name ||
+                          "N/A"}
+                      </Text>
+                    </HStack>
+                    <HStack justifyContent="space-between">
+                      <Text color="$secondary500">Garbage Type:</Text>
+                      <Text fontWeight="$medium">
+                        {selectedAttendance.schedule?.garbage_type || "N/A"}
+                      </Text>
+                    </HStack>
+                    <HStack justifyContent="space-between">
+                      <Text color="$secondary500">Collection Date:</Text>
+                      <Text fontWeight="$medium">
+                        {formatDate(
+                          selectedAttendance.schedule?.scheduled_collection
+                        )}
+                      </Text>
+                    </HStack>
+                  </VStack>
+
+                  {/* Route Information */}
+                  <VStack space="md">
+                      <HStack space="sm" alignItems="center">
+                        <MapPin size={18} color="#666" />
+                        <Text fontWeight="$bold" size="md">
+                          Route Details
+                        </Text>
+                      </HStack>
+		                  <HStack justifyContent="space-between" alignItems="flex-start">
+                        <Text color="$secondary500">Barangays Covered:</Text>
+                      </HStack>
+                      <HStack justifyContent="space-between" alignItems="flex-start">
+                        <VStack
+                          space="xs"
+                          alignItems="flex-start"
+                          flex={1}
+                          maxWidth="100%"
+                        >
+                          {selectedAttendance?.schedule?.task?.map(
+                            (barangay: any, index: number) => (
+                              <HStack
+                                key={barangay._id}
+                                space="sm"
+                                alignItems="center"
+                                width="$full"
+                              >
+                                <Text color="$primary500">•</Text>
+                                <Text
+                                  fontWeight="$medium"
+                                  flex={1}
+                                  numberOfLines={1}
+                                  ellipsizeMode="tail"
+                                >
+                                  {barangay.barangay_id?.barangay_name}
+                                </Text>
+                                <Box
+                                  bg={barangay.status === 'Completed' ? '$green500' :
+                                    barangay.status === 'Pending' ? '$yellow500' : '$gray500'}
+                                  px="$2"
+                                  py="$1"
+                                  borderRadius="$md"
+                                >
+                                  <Text
+                                    color="$white"
+                                    fontSize="$xs"
+                                    fontWeight="$bold"
+                                    textTransform="capitalize"
+                                  >
+                                    {barangay.status}
+                                  </Text>
+                                </Box>
+                              </HStack>
+                            )
+                          )}
+                        </VStack>
+                      </HStack>
+                    </VStack>
+
+                  {/* Additional Information */}
+                  {/* <VStack space="md">
+                    <HStack space="sm" alignItems="center">
+                      <Info size={18} color="#666" />
+                      <Text fontWeight="$bold" size="md">
+                        Additional Information
+                      </Text>
+                    </HStack>
+                    <HStack justifyContent="space-between">
+                      <Text color="$secondary500">Attendance ID:</Text>
+                      <Text fontWeight="$medium" size="sm">
+                        {selectedAttendance._id}
+                      </Text>
+                    </HStack>
+                    <HStack justifyContent="space-between">
+                      <Text color="$secondary500">Created:</Text>
+                      <Text fontWeight="$medium">
+                        {formatDateTime(selectedAttendance.created_at)}
+                      </Text>
+                    </HStack>
+                  </VStack> */}
+                </VStack>
+              )}
+            </ScrollView>
+          </ModalBody>
+
+          <ModalFooter>
+            <HStack space="sm" flex={1}>
+              <Button
+                variant="outline"
+                action="secondary"
+                onPress={handleCloseDetailsModal}
+                flex={1}
+              >
+                <ButtonText>Close</ButtonText>
+              </Button>
+            </HStack>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+    </Box>
+  );
+}

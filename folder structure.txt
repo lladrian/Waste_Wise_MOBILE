@@ -1,0 +1,90 @@
+│
+├── app/                                 # Expo Router screens
+│   ├── _layout.tsx                      # Handles navigation + auth/role logic
+│   ├── index.tsx                        # Login screen (entry point)
+│
+│   ├── auth/                            # Authentication
+│   │   ├── login.tsx
+│   │   ├── signup.tsx                   # Residents only
+│   │   ├── forgot-password.tsx
+│
+│   ├── resident/                        # Screens for Residents
+│   │   ├── index.tsx                    # Resident Dashboard
+│   │   ├── schedule.tsx                 # View barangay schedule
+│   │   ├── report.tsx                   # Report uncollected garbage
+│   │   ├── history.tsx                  # Report history
+│
+│   ├── collector/                       # Screens for Garbage Collectors
+│   │   ├── index.tsx                    # Collector Dashboard
+│   │   ├── routes.tsx                   # Assigned routes + GPS
+│   │   ├── attendance.tsx               # Clock in/out
+│   │   ├── report.tsx                   # Truck issues or missed pickup
+│
+│   ├── notifications.tsx                # Notification list for both roles
+│   ├── settings.tsx                     # Profile / logout
+│
+│   ├── offline/                         # Offline-related screens
+│   │   └── queue.tsx                    # View pending uploads/reports
+│
+├── components/                          # Reusable components
+│   ├── ui/
+│   │   ├── Button.tsx
+│   │   ├── Input.tsx
+│   │   ├── Card.tsx
+│   │   ├── Modal.tsx
+│   │   ├── Loader.tsx
+│   │
+│   ├── map/
+│   │   ├── TruckMap.tsx                 # Map for collectors (GPS)
+│   │   └── BarangayMap.tsx              # Map for residents
+│
+├── context/                             # App-wide contexts
+│   ├── AuthContext.tsx                  # Auth state + token storage
+│   ├── RoleContext.tsx                  # Role-based access control
+│   ├── NotificationContext.tsx          # Push notifications
+│   └── OfflineContext.tsx               # Queue for offline reports
+│
+├── hooks/                               # Custom hooks
+│   ├── useAuth.ts                       # Login / logout / token refresh
+│   ├── useFetch.ts                      # Generic API fetch (with token)
+│   ├── useNetworkStatus.ts              # Detect online/offline
+│   ├── useLocation.ts                   # GPS tracking for collectors
+│   ├── useOfflineSync.ts                # Sync queued data
+│   ├── useNotifications.ts              # Handle push notifications
+│
+├── services/                            # Connection to your existing backend API
+│   ├── api.ts                           # Base Axios/fetch setup (with auth headers)
+│   ├── authService.ts                   # Login, signup, password reset
+│   ├── scheduleService.ts               # Get schedules per barangay
+│   ├── reportService.ts                 # Submit/view reports
+│   ├── userService.ts                   # Fetch user profile, role
+│   └── notificationService.ts           # Fetch/send notifications
+│
+├── storage/                             # Local device storage
+│   ├── localStorage.ts                  # AsyncStorage helper
+│   ├── offlineQueue.ts                  # Queued offline actions
+│
+├── utils/                               # Helpers & constants
+│   ├── constants.ts                     # API base URL, roles, etc.
+│   ├── helpers.ts                       # Common utilities
+│   ├── validators.ts                    # Input validation
+│   └── permissions.ts                   # GPS/Notification permissions
+│
+├── assets/                              # Images, icons, fonts
+│   ├── icons/
+│   ├── images/
+│   └── fonts/
+│
+├── styles/                              # Tailwind / NativeWind styles
+│   ├── global.css
+│   └── theme.ts
+│
+├── config/
+│   ├── app.config.ts                    # Expo app settings
+│   └── env.ts                           # Backend base URL, keys, etc.
+│
+├── package.json
+├── tailwind.config.js
+├── tsconfig.json                        # TypeScript configuration
+├── app.json
+└── README.md
