@@ -22,7 +22,7 @@ export const getAllDataDashboardResident = async (user_id : string, barangay_id:
     const res2 = await API.getAllScheduleSpecifcBarangay(barangay_id);
 
 
-    return { data: {garbage_reports: res.data, schedules: res2.data}, success: true };
+    return { data: { garbage_reports: res.data, schedules: res2.data }, success: true };
   } catch (error) {
     // console.error("Failed to register user:", error);
     throw error;
@@ -30,4 +30,16 @@ export const getAllDataDashboardResident = async (user_id : string, barangay_id:
 };
 
 
+
+export const getAllDataDashboardGuest = async () => {
+  try {
+    const res = await API.getAllSchedule();
+
+
+    return { data: res.data, success: true };
+  } catch (error) {
+    // console.error("Failed to register user:", error);
+    throw error;
+  }
+};
 

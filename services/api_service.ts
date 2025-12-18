@@ -58,6 +58,16 @@ export interface createGarbageReportPayload {
 }
 
 
+export interface createGarbageReportPayloadGuest {
+  latitude?: number;
+  longitude?: number;
+  garbage_type : string;
+  notes?: string;
+  report_type : string;
+}
+
+
+
 export interface updateUserProfilePayload {
   first_name: string;
   middle_name: string;
@@ -80,6 +90,8 @@ export interface createCollectorReportPayload {
 
 export interface updateAttendanceTimeOutPayload {
   ended_at : string;
+  task: any;
+  schedule_id: string;
 }
 
 
@@ -101,17 +113,31 @@ export interface updateCollectionStatusPayload {
   }[];
 }
 
+
+export interface createNotification{
+  user_id : string;
+  recurring_day : string;
+}
+
+export const createNotificationSpecificUserResident = (data: createNotification) => axios.post(`/notifications/create_notification_resident`, data);
+export const createNotificationSpecificUserCollector = (data: createNotification) => axios.post(`/notifications/create_notification_garbage_collector`, data);
+export const updateReadAllNotificationSpecificUser = (id: string) => axios.get(`/notifications/update_read_all_notification_specific_user/${id}`);
+export const updateReadSpecificNotification = (id: string) => axios.get(`/notifications/update_read_specific_notification/${id}`);
+export const getAllNotificationSpecificUser = (id: string, role: string) => axios.get(`/notifications/get_all_notification_specific_user/${id}/${role}`);
 export const updateScheduleCollectionStatus = (id: string, data: updateCollectionStatusPayload) => axios.put(`/schedules/update_schedule_garbage_collection_status/${id}`, data);
 export const getAllLoginLogSpecificUser = (id: string) => axios.get(`/logs/get_all_login_log_specific_user/${id}`);
 export const checkAttendanceSpecificUser = (id: string) => axios.get(`/collector_attendances/check_collector_attendance/${id}`);
 export const createAttendanceTimeIn = (data: createAttendanceTimeInPayload) => axios.post(`/collector_attendances/add_collector_attendance`, data);
 export const updateAttendanceTimeOut = (id: string, data: updateAttendanceTimeOutPayload) => axios.put(`/collector_attendances/update_collector_attendance_time_out/${id}`, data);
 export const getAllAttendanceSpecificUser = (id: string) => axios.get(`/collector_attendances/get_all_collector_attendance_specific_user/${id}`);
+export const getAllAttendance = () => axios.get(`/collector_attendances/get_all_collector_attendance`);
 export const updateUserProfile = (id: string, data: updateUserProfilePayload) => axios.put(`/users/update_user_profile/${id}`, data);
+export const getAllSchedule = () => axios.get(`/schedules/get_all_schedule`);
 export const getAllScheduleSpecifcBarangay = (id: string) => axios.get(`/schedules/get_all_schedule_specific_barangay/${id}`);
 export const getAllScheduleSpecificUser = (id: string) => axios.get(`/schedules/get_all_schedule_specific_user_garbage_collector/${id}`);
 export const getTodayScheduleSpecificUser = (id: string) => axios.get(`/schedules/get_all_schedule_current_day_specific_user/${id}`);
-export const getAllGarbageReport = (id: string) => axios.get(`/garbage_reports/get_all_garbage_report_specific_user/${id}`);
+export const getAllGarbageReport = () => axios.get(`/garbage_reports/get_all_garbage_report`);
+export const getAllGarbageReportSpecificUser = (id: string) => axios.get(`/garbage_reports/get_all_garbage_report_specific_user/${id}`);
 export const getAllCollectorReport = (id: string) => axios.get(`/collector_reports/get_all_collector_report_specific_user/${id}`);
 export const getAllBarangay = () => axios.get(`/barangays/get_all_barangay`);
 export const getAllGarbageSiteSpecificBarangay = (id: string | undefined) => axios.get(`/garbage_sites/get_all_garbage_site_specific_barangay/${id}`);
@@ -124,7 +150,8 @@ export const verifyOTP = (data: OTPPayload) => axios.post('/otp/verify_otp', dat
 export const createOTP = (data: CreateOTPPayload) => axios.post('/otp/add_otp', data);
 export const changePasswordRecovery = (data: changePasswordRecoveryPayload) => axios.put('/users/update_user_password_recovery', data);
 export const createGarbageReport = (data: createGarbageReportPayload) => axios.post('/garbage_reports/add_garbage_report', data);
+export const createGarbageReportGuest = (data: createGarbageReportPayloadGuest) => axios.post('/garbage_reports/add_garbage_report_guest', data);
 export const createCollectorReport = (data: createCollectorReportPayload) => axios.post('/collector_reports/add_collector_report', data);
 export const updateTruckStatus = (id: string, data: updateTruckStatusPayload) => axios.put(`/trucks/update_truck_status/${id}`, data);
-
+export const getAllTruckSpecificUser = (id: string) => axios.get(`/trucks/get_all_truck_specific_user/${id}`);
 

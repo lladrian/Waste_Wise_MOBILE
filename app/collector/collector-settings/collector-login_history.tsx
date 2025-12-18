@@ -58,7 +58,7 @@ export default function CollectorLoginLogsScreen() {
   const [selectedLog, setSelectedLog] = useState<LoginLogData | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
-  const { connectWebSocket, fetchTodayScheduleRecords } = useLocation();
+  const { connectWebSocket } = useLocation();
 
   const toast = useToast();
 
@@ -66,7 +66,6 @@ export default function CollectorLoginLogsScreen() {
     React.useCallback(() => {
       fetchLoginLogs();
       connectWebSocket();
-      fetchTodayScheduleRecords();
     }, [])
   );
 

@@ -28,6 +28,8 @@ import { useLocation } from '@/context/LocationContext';
 
 import { getTodayScheduleSpecificUser, updateScheduleCollectionStatus } from "../../hooks/schedule_hook";
 import { useFocusEffect } from "@react-navigation/native";
+import truckIcon from "../../assets/truck.png";
+
 
 export interface ScheduleData {
   _id: string;
@@ -68,13 +70,18 @@ interface TaskUpdate {
   status: "Complete" | "Pending";
 }
 
-
 type UserLocation = {
   latitude: number;
   longitude: number;
   accuracy?: number;
   timestamp?: number;
 };
+
+interface RouteData {
+  points: { latitude: number; longitude: number }[];
+  color: string;
+  routeName: string;
+}
 
 export default function CollectorRoutesScreen() {
   const { user } = useContext(AuthContext)!;
@@ -84,28 +91,80 @@ export default function CollectorRoutesScreen() {
   const [schedule, setSchedule] = useState<ScheduleData | null>(null);
   const [showAllGarbageSites, setShowAllGarbageSites] = useState(true); // Global toggle for all sites
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
-  const { location, connectWebSocket, fetchTodayScheduleRecords } = useLocation();
+  const [routeData, setRouteData] = useState<RouteData>({
+    points: [],
+    color: "#3B82F6",
+    routeName: "Collection Route"
+  });
+  
+  const { location, connectWebSocket } = useLocation(); 
+  const [prevLocation, setPrevLocation] = useState<UserLocation | null>(null);
+  const [rotation, setRotation] = useState(0);
 
-  useEffect(() => {
-    if (location) {
-      setUserLocation({
-        latitude: location.latitude,
-        longitude: location.longitude,
-        // accuracy: location.accuracy,
-        // accuracy: 0,
-        // timestamp: location.timestamp,
-      });
+function calculateBearingForReactNativeMaps(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number {
+  const toRadians = (degrees: number): number =>
+    degrees * (Math.PI / 180);
+
+  const toDegrees = (radians: number): number =>
+    radians * (180 / Math.PI);
+
+  const φ1 = toRadians(lat1);
+  const φ2 = toRadians(lat2);
+  const Δλ = toRadians(lon2 - lon1);
+
+  const y = Math.sin(Δλ) * Math.cos(φ2);
+  const x =
+    Math.cos(φ1) * Math.sin(φ2) -
+    Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+
+  let bearing = toDegrees(Math.atan2(y, x));
+  bearing = (bearing + 360) % 360;
+
+  // Adjustment for RIGHT-facing icon
+  const iconBearing = (bearing - 90 + 360) % 360;
+
+  return Math.round(iconBearing);
+}
+
+
+useEffect(() => {
+  if (location) {
+    const newLocation = {
+      latitude: location.latitude,
+      longitude: location.longitude,
+    };
+
+    if (prevLocation) {
+      const bearing = calculateBearingForReactNativeMaps(
+        prevLocation.latitude,
+        prevLocation.longitude,
+        newLocation.latitude,
+        newLocation.longitude
+      );
+
+      setRotation(bearing);
     }
-  }, [location]); // This will run every time location changes
 
+    setPrevLocation(newLocation);
+    setUserLocation(newLocation);
+  }
+}, [location]);
 
   useFocusEffect(
     React.useCallback(() => {
       fetchTodaySchedule();
       connectWebSocket();
-      fetchTodayScheduleRecords();
+
     }, [])
   );
+
+
+
 
   // Helper function to extract and flatten garbage sites
   const extractGarbageSites = (garbageSitesData: any[]): GarbageSite[] => {
@@ -142,10 +201,33 @@ export default function CollectorRoutesScreen() {
 
       if (scheduleData?.data?.data?.[0]) {
         const schedule = scheduleData?.data?.data[0];
-        
+
         // Extract and set all garbage sites
         const allGarbageSites = extractGarbageSites(schedule.garbage_sites);
         setGarbageSites(allGarbageSites);
+
+        // Extract route data if exists
+        let routePolyline: { latitude: number; longitude: number }[] = [];
+        let polylineColor = "#3B82F6"; // Default color
+        let routeName = "Collection Route";
+
+        if (schedule.route?.route_points && schedule.route.route_points.length > 0) {
+          routePolyline = schedule.route.route_points.map((point: any) => ({
+            latitude: point.lat,
+            longitude: point.lng
+          }));
+          
+          // Get polyline color from route data, fallback to default
+          polylineColor = schedule.route.polyline_color || "#3B82F6";
+          routeName = schedule.route.route_name || "Collection Route";
+        }
+
+        // Store route data in state
+        setRouteData({
+          points: routePolyline,
+          color: polylineColor,
+          routeName: routeName
+        });
 
         const mappedAreas = schedule.task.map((task: any, index: number) => {
           const barangayId = task.barangay_id._id;
@@ -179,7 +261,7 @@ export default function CollectorRoutesScreen() {
           };
         });
 
-        setSchedule(schedule)
+        setSchedule(schedule);
         setAreas(mappedAreas);
       }
     } catch (error) {
@@ -189,13 +271,12 @@ export default function CollectorRoutesScreen() {
     }
   };
 
-
   const handleCheckboxChange = (areaId: string) => {
     const area = areas.find(a => a.id === areaId);
     if (!area) return;
 
     const newCompleted = !area.completed;
-    
+
     // Update local state immediately for responsive UI
     setAreas(prev =>
       prev.map(a =>
@@ -244,7 +325,7 @@ export default function CollectorRoutesScreen() {
   const handleSiteVisibilityChange = (areaId: string) => {
     setAreas(prev =>
       prev.map(area =>
-        area.id === areaId 
+        area.id === areaId
           ? { ...area, showSites: !area.showSites }
           : area
       )
@@ -255,7 +336,7 @@ export default function CollectorRoutesScreen() {
   const toggleAllGarbageSitesVisibility = () => {
     const newVisibility = !showAllGarbageSites;
     setShowAllGarbageSites(newVisibility);
-    
+
     // Update all individual barangay site visibilities
     setAreas(prev =>
       prev.map(area => ({
@@ -306,25 +387,6 @@ export default function CollectorRoutesScreen() {
           </Text>
         </Box>
 
-        {/* Progress Summary */}
-        <Card>
-          <VStack space="sm">
-            <HStack justifyContent="space-between" alignItems="center">
-              <Text fontWeight="$bold">Today&apos;s Progress</Text>
-              <Badge
-                action={completedAreas === totalAreas ? "success" : "info"}
-              >
-                <BadgeText>
-                  {completedAreas === totalAreas ? "Completed" : "In Progress"}
-                </BadgeText>
-              </Badge>
-            </HStack>
-            <Text color="$secondary500">
-              Complete your assigned areas and mark them as done
-            </Text>
-          </VStack>
-        </Card>
-
         {/* Map View */}
         {(areas.length > 0 || garbageSites.length > 0) && (
           <Box>
@@ -341,8 +403,8 @@ export default function CollectorRoutesScreen() {
                       ) : (
                         <EyeOff size={18} color="#6B7280" />
                       )}
-                      <Text 
-                        size="sm" 
+                      <Text
+                        size="sm"
                         color={showAllGarbageSites ? "#3B82F6" : "#6B7280"}
                         fontWeight="$medium"
                       >
@@ -352,17 +414,27 @@ export default function CollectorRoutesScreen() {
                   </Pressable>
                 </HStack>
               </HStack>
-              
+
               {/* Map Legend */}
               <HStack space="md" mt="$2" flexWrap="wrap">
                 <HStack space="xs" alignItems="center">
                   <Box w={12} h={12} bg="$blue500" borderRadius="$sm" />
                   <Text size="xs">Garbage Site</Text>
                 </HStack>
-                {/* <HStack space="xs" alignItems="center">
-                  <Box w={12} h={12} borderWidth={2} borderColor="#3B82F6" borderRadius="$sm" />
-                  <Text size="xs">Collection Route</Text>
-                </HStack> */}
+                {routeData.points.length > 0 && (
+                  <HStack space="xs" alignItems="center">
+                    <Box 
+                      w={12} 
+                      h={12} 
+                      style={{
+                        backgroundColor: routeData.color,
+                        borderRadius: 3,
+                        opacity: 0.7
+                      }}
+                    />
+                    <Text size="xs">{routeData.routeName}</Text>
+                  </HStack>
+                )}
               </HStack>
             </Card>
 
@@ -377,28 +449,29 @@ export default function CollectorRoutesScreen() {
                   longitudeDelta: 0.5,
                 }}
                 showsUserLocation={true}
-
                 showsCompass={true}
                 showsScale={true}
                 showsBuildings={true}
                 showsTraffic={false}
               >
-                  {/* <Marker
-                    coordinate={{
-                      latitude: 11.099144436997905,
-                      longitude: 124.556244988605
-                    }}
-                    title={`GT101`}
-                    description={`Garbage Collector`}
-                    pinColor="red"
-                  /> */}
-
+                {/* User Location Marker */}
                 {userLocation && (
                   <Marker
                     coordinate={userLocation}
-                    title="GT101"
-                    description="Garbage Collector"
-                    pinColor="red"
+                    // title="GT101"
+                    description="Garbage Collector" 
+                    image={truckIcon}
+                    rotation={rotation}
+                  />
+                )}
+
+                {/* Polyline for Route */}
+                {routeData.points.length > 0 && (
+                  <Polyline
+                    coordinates={routeData.points}
+                    strokeColor={routeData.color}
+                    strokeWidth={4}
+                    // lineDashPattern={[10, 5]} // Creates a dashed line
                   />
                 )}
 
@@ -447,6 +520,37 @@ export default function CollectorRoutesScreen() {
           </Card>
         )}
 
+        {/* Route Information */}
+        {routeData.points.length > 0 && (
+          <Card>
+            <VStack space="sm">
+              <HStack justifyContent="space-between" alignItems="center">
+                <Text fontWeight="$bold">Route Information</Text>
+                <Badge action="info">
+                  <BadgeText>{routeData.routeName}</BadgeText>
+                </Badge>
+              </HStack>
+              <Text color="$secondary500">
+                Route Points: {routeData.points.length} waypoints
+              </Text>
+              <HStack space="sm" alignItems="center" mt="$1">
+                <Box 
+                  w={16} 
+                  h={4} 
+                  style={{
+                    backgroundColor: routeData.color,
+                    borderRadius: 2,
+                    opacity: 0.7
+                  }}
+                />
+                <Text size="sm" color="$secondary500">
+                  Route color: {routeData.color}
+                </Text>
+              </HStack>
+            </VStack>
+          </Card>
+        )}
+
         {/* Areas List */}
         <VStack space="md">
           <HStack justifyContent="space-between" alignItems="center">
@@ -461,8 +565,8 @@ export default function CollectorRoutesScreen() {
                   ) : (
                     <EyeOff size={16} color="#6B7280" />
                   )}
-                  <Text 
-                    size="sm" 
+                  <Text
+                    size="sm"
                     color={showAllGarbageSites ? "#3B82F6" : "#6B7280"}
                   >
                     {showAllGarbageSites ? "All Shown" : "All Hidden"}
@@ -482,7 +586,7 @@ export default function CollectorRoutesScreen() {
             areas.map((area) => {
               const displayStatus = area.completed ? "Complete" : "Pending";
               const areaGarbageSites = getGarbageSitesByBarangay(area.barangayId);
-              const visibleAreaSites = areaGarbageSites.filter(site => 
+              const visibleAreaSites = areaGarbageSites.filter(site =>
                 showAllGarbageSites && area.showSites
               );
 
@@ -492,7 +596,7 @@ export default function CollectorRoutesScreen() {
                     <HStack space="md" alignItems="flex-start">
                       {/* Completion Checkbox */}
                       <VStack space="sm" alignItems="center">
-                        <Checkbox 
+                        <Checkbox
                           value={area.completed ? "true" : "false"}
                           isChecked={area.completed}
                           onChange={() => handleCheckboxChange(area.id)}
@@ -502,10 +606,10 @@ export default function CollectorRoutesScreen() {
                             <CheckboxIcon as={Check} />
                           </CheckboxIndicator>
                         </Checkbox>
-                        
+
                         {/* Site Visibility Checkbox */}
                         {areaGarbageSites.length > 0 && (
-                          <Pressable 
+                          <Pressable
                             onPress={() => handleSiteVisibilityChange(area.id)}
                             hitSlop={8}
                           >
@@ -542,12 +646,12 @@ export default function CollectorRoutesScreen() {
                         </HStack>
 
                         <HStack space="md">
-                          <HStack space="xs" alignItems="center">
+                          {/* <HStack space="xs" alignItems="center">
                             <MapPin size={14} color="#6B7280" />
                             <Text size="sm" color="$secondary500">
                               {area.garbageSites} Garbage Sites
                             </Text>
-                          </HStack>
+                          </HStack> */}
 
                           {/* <HStack space="xs" alignItems="center">
                             <Navigation size={14} color="#6B7280" />
@@ -564,8 +668,8 @@ export default function CollectorRoutesScreen() {
                               <Text size="sm" fontWeight="$medium">
                                 Sites ({visibleAreaSites.length}/{areaGarbageSites.length}):
                               </Text>
-                              <Badge 
-                                size="sm" 
+                              <Badge
+                                size="sm"
                                 action={area.showSites && showAllGarbageSites ? "info" : "muted"}
                               >
                                 <BadgeText>

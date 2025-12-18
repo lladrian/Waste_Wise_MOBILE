@@ -22,9 +22,24 @@ export default function RootLayout() {
               {/* Keep it simple - just declare all possible routes */}
               <Stack screenOptions={{ headerShown: false }}>
                 <Stack.Screen name="index" />
+                <Stack.Screen name="home" />
+                <Stack.Screen
+                  name="notification"
+                  options={{
+                    headerShown: true,
+                    headerStyle: {
+                      backgroundColor: "#007BFF",
+                    },
+                    headerTintColor: "#ffffff",
+                    headerTitleStyle: {
+                      fontWeight: "bold",
+                    }, title: "Notifications"
+                  }}
+                />
                 <Stack.Screen name="auth" />
                 <Stack.Screen name="collector" />
                 <Stack.Screen name="resident" />
+                <Stack.Screen name="guest" />
               </Stack>
             </OfflineProvider>
           </LocationProvider>

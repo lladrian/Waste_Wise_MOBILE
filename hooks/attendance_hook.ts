@@ -9,12 +9,27 @@ export interface createAttendanceTimeInPayload {
 
 export interface updateAttendanceTimeOutPayload {
   ended_at : string;
+  task: any;
+  schedule_id: string;
 }
+
+
 
 
 export const checkAttendanceSpecificUser = async (user_id: string) => {
   try {
     const res = await API.checkAttendanceSpecificUser(user_id);
+
+    return { data: res.data, success: true };
+  } catch (error) {
+    // console.error("Failed to register user:", error);
+    throw error;
+  }
+};
+
+export const getAllAttendance = async () => {
+  try {
+    const res = await API.getAllAttendance();
 
     return { data: res.data, success: true };
   } catch (error) {

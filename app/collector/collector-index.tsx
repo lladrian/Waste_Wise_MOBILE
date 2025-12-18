@@ -35,9 +35,14 @@ import {
   Clock,
   CheckCircle2,
   AlertCircle,
+  Bell, // Added Bell icon import
 } from "lucide-react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { getAllDataDashboardCollector } from "../../hooks/dashboard_hook";
+import { createNotificationSpecificUserCollector } from "../../hooks/notification_hook";
+
+
+
 
 import { AppToast } from "@/components/ui/AppToast";
 import { useLocation } from '@/context/LocationContext';
@@ -53,8 +58,10 @@ export default function CollectorDashboard() {
   const router = useRouter();
   const toast = useToast();
   const [schedules, setSchedules] = useState<ScheduleData[]>([]);
-    const { connectWebSocket, fetchTodayScheduleRecords } = useLocation();
+  const { connectWebSocket } = useLocation();
 
+  // Add notification state
+  const [notificationCount, setNotificationCount] = useState(0);
 
   // Use static data instead of API call
   const collectors = staticCollectors;
@@ -75,10 +82,58 @@ export default function CollectorDashboard() {
     React.useCallback(() => {
       fetchGarbageReports();
       connectWebSocket();
-      fetchTodayScheduleRecords();
-      // refresh();
+      createNotificationCollector();
     }, [])
   );
+
+
+   const createNotificationCollector = async () => {
+    try {
+      const input_data = {
+        user_id: user?._id || "",
+        recurring_day: getTodayDayName()
+      }
+      const { data, success } = await createNotificationSpecificUserCollector(input_data);
+
+      if (success) {
+        console.log('created')
+      }
+    } catch (err) {
+      toast.show({
+        placement: "top right",
+        render: ({ id }) => (
+          <AppToast
+            id={id}
+            type="error"
+            title="Error"
+            description="Failed to create notification."
+          />
+        ),
+      });
+    }
+  };
+
+  // Function to handle notification button press
+  const handleNotificationPress = () => {
+    router.push("/notification"); // Adjust route based on your structure
+    // Or use: router.push("/notifications");
+  };
+
+  function getTodayDayName(): string {
+    const now: Date = new Date();
+
+    // Convert to Philippines time (UTC+8)
+    const utc: number = now.getTime() + now.getTimezoneOffset() * 60000;
+    const philippinesTime: Date = new Date(utc + 8 * 3600000);
+
+    const days: string[] = [
+      "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
+    ];
+
+    const dayName: string = days[philippinesTime.getDay()];
+
+    return dayName.toLowerCase();
+  }
 
 
   const fetchGarbageReports = async () => {
@@ -86,34 +141,23 @@ export default function CollectorDashboard() {
       const { data, success } = await getAllDataDashboardCollector(user?._id || "");
  
       if (success === true) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
         const todaySchedulesData = data?.schedules?.data.filter(
-          (schedule: any) => {
-            const scheduleDate = new Date(schedule.scheduled_collection);
-            scheduleDate.setHours(0, 0, 0, 0);
-
-            return scheduleDate.getTime() === today.getTime();
-          }
+          (schedule: any) => 
+            Array.isArray(schedule.recurring_day) && 
+            schedule.recurring_day.includes(getTodayDayName())
         );
 
         const upcomingSchedulesData = data?.schedules?.data.filter(
-          (schedule: any) => {
-            const scheduleDate = new Date(schedule.scheduled_collection);
-            scheduleDate.setHours(0, 0, 0, 0);
-
-            return scheduleDate.getTime() > today.getTime();
-          }
+          (schedule: any) =>
+            Array.isArray(schedule.recurring_day) && 
+            !schedule.recurring_day.includes(getTodayDayName())
         );
 
         const onRouteTrucksCount = data?.schedules?.data.filter(
           (schedule: any) => {
-            const scheduleDate = new Date(schedule.scheduled_collection);
-            scheduleDate.setHours(0, 0, 0, 0);
-
             return (
-              scheduleDate.getTime() === today.getTime() &&
+              Array.isArray(schedule.recurring_day) && 
+              schedule.recurring_day.includes(getTodayDayName()) &&
               schedule.truck?.status === "On Route"
             );
           }
@@ -129,11 +173,9 @@ export default function CollectorDashboard() {
         }));
 
         const onRouteTrucks = data.schedules.data.filter((schedule: any) => {
-          const scheduleDate = new Date(schedule.scheduled_collection);
-          scheduleDate.setHours(0, 0, 0, 0);
-
           return (
-            scheduleDate.getTime() === today.getTime() &&
+            Array.isArray(schedule.recurring_day) && 
+            schedule.recurring_day.includes(getTodayDayName()) &&
             schedule.truck?.status === "On Route" &&
             schedule.route.merge_barangay.some(
               (barangay: any) =>
@@ -163,14 +205,13 @@ export default function CollectorDashboard() {
   };
 
   // Helper function to capitalize each word
-const capitalizeName = (name?: string) => {
-  if (!name) return "";
-  return name
-    .split(" ")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(" ");
-};
-
+  const capitalizeName = (name?: string) => {
+    if (!name) return "";
+    return name
+      .split(" ")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(" ");
+  };
 
   return (
     <ScrollView flex={1} bg="$white">
@@ -179,9 +220,41 @@ const capitalizeName = (name?: string) => {
         <Card bg="$primary50" p="$4" borderColor="$primary200">
           <HStack justifyContent="space-between" alignItems="flex-start">
             <VStack space="xs" flex={1}>
-              <GSText size="2xl" fontWeight="$bold" color="$primary900">
-                Welcome back, {capitalizeName(user?.first_name)}!
-              </GSText>
+              <HStack justifyContent="space-between" alignItems="center">
+                <GSText size="2xl" fontWeight="$bold" color="$primary900">
+                  Welcome back, {capitalizeName(user?.first_name)}!
+                </GSText>
+                
+                {/* Notification Button - Moved inside VStack for proper alignment */}
+                <Button 
+                  onPress={handleNotificationPress}
+                  variant="link"
+                  p="$1"
+                  position="relative"
+                >
+                  <Box position="relative">
+                    <Bell size={24} color="#1E40AF" />
+                    {notificationCount > 0 && (
+                      <Box
+                        position="absolute"
+                        top={-5}
+                        right={-5}
+                        bg="$red500"
+                        rounded="$full"
+                        w="$4"
+                        h="$4"
+                        justifyContent="center"
+                        alignItems="center"
+                      >
+                        <GSText size="2xs" color="$white" fontWeight="$bold">
+                          {notificationCount > 9 ? "9+" : notificationCount}
+                        </GSText>
+                      </Box>
+                    )}
+                  </Box>
+                </Button>
+              </HStack>
+              
               <GSText color="$primary700" size="sm">
                 {user?.barangay?.barangay_name} •{" "}
                 {user?.role
@@ -199,9 +272,10 @@ const capitalizeName = (name?: string) => {
               )}
             </VStack>
 
-            <Box bg="$primary100" p="$2" rounded="$full">
+            {/* User Avatar - Keep this if you want it on the right side */}
+            {/* <Box bg="$primary100" p="$2" rounded="$full" ml="$2">
               <User size={24} color="#1E40AF" />
-            </Box>
+            </Box> */}
           </HStack>
         </Card>
 
@@ -296,7 +370,7 @@ const capitalizeName = (name?: string) => {
 
           <HStack space="md" flexWrap="wrap">
             {/* Collectors Card */}
-            <Card
+            {/* <Card
               flex={1}
               minWidth="$32"
               p="$3"
@@ -314,7 +388,7 @@ const capitalizeName = (name?: string) => {
                   Active Now
                 </GSText>
               </VStack>
-            </Card>
+            </Card> */}
 
             {/* Pending Card */}
             {/* <Card
@@ -340,8 +414,8 @@ const capitalizeName = (name?: string) => {
         </VStack>
 
         {/* Live Collector Tracking */}
-        <Card p="$4" borderColor="$primary200">
-          <HStack justifyContent="space-between" alignItems="center" mb="$4">
+        {/* <Card p="$4" borderColor="$primary200"> */}
+          {/* <HStack justifyContent="space-between" alignItems="center" mb="$4">
             <VStack space="xs">
               <GSText size="lg" fontWeight="$bold" color="$secondary800">
                 Live Collector Tracking
@@ -350,13 +424,13 @@ const capitalizeName = (name?: string) => {
                 Real-time garbage truck locations
               </GSText>
             </VStack>
-            {/* <Link href="/resident/track_collectors" asChild> */}
+            <Link href="/resident/track_collectors" asChild>
             <Link href="/" asChild>
               <Button size="sm" variant="link">
                 <GSText color="$primary600">View All</GSText>
               </Button>
             </Link>
-          </HStack>
+          </HStack> */}
 
           {/* <Box h={300} borderRadius="$lg" overflow="hidden" mb="$3">
             <MapView
@@ -383,7 +457,7 @@ const capitalizeName = (name?: string) => {
               ))}
             </MapView>
           </Box> */}
-        </Card>
+        {/* </Card> */}
       </VStack>
     </ScrollView>
   );

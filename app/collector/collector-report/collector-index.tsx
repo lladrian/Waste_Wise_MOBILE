@@ -39,17 +39,17 @@ export default function CollectorReportScreen() {
   const router = useRouter();
   const toast = useToast();
   const [collectorReports, setCollectorReports] = useState<CollectorReport[]>([]);
-    const { connectWebSocket, fetchTodayScheduleRecords } = useLocation();
+  const { connectWebSocket } = useLocation();
 
 
   useFocusEffect(
     React.useCallback(() => {
       fetchCollectorReports();
       connectWebSocket();
-      fetchTodayScheduleRecords();
     }, [])
   );
 
+  
   const fetchCollectorReports = async () => {
     try {
       const { data, success } = await getAllCollectorReport(user?._id || "");

@@ -9,6 +9,17 @@ export interface createGarbageReportPayload {
   notes?: string | undefined;
 }
 
+
+export interface createGarbageReportPayloadGuest {
+  latitude?: number;
+  longitude?: number;
+  garbage_type : string;
+  report_type : string;
+  notes?: string | undefined;
+}
+
+
+
 export interface createCollectorReportPayload {
   user : string;
   truck : string;
@@ -43,9 +54,20 @@ export const createGarbageReport = async (data : createGarbageReportPayload) => 
 };
 
 
-export const getAllGarbageReport = async (user_id : string) => {
+export const createGarbageReportGuest = async (data : createGarbageReportPayloadGuest) => {
   try {
-    const res = await API.getAllGarbageReport(user_id);
+    const res = await API.createGarbageReportGuest(data);
+
+    return { data: res.data, success: true };
+  } catch (error) {
+    // console.error("Failed to register user:", error);
+    throw error;
+  }
+};
+
+export const getAllGarbageReport = async () => {
+  try {
+    const res = await API.getAllGarbageReport();
 
     return { data: res.data, success: true };
   } catch (error) {

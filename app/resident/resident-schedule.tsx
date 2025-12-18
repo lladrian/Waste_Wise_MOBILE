@@ -56,26 +56,42 @@ export default function ResidentScheduleScreen() {
     }, [])
   );
 
+  function getTodayDayName(): string {
+    const now: Date = new Date();
+
+    // Convert to Philippines time (UTC+8)
+    const utc: number = now.getTime() + now.getTimezoneOffset() * 60000;
+    const philippinesTime: Date = new Date(utc + 8 * 3600000);
+
+    const days: string[] = [
+      "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
+    ];
+
+    const dayName: string = days[philippinesTime.getDay()];
+
+    return dayName.toLowerCase();
+  }
+
+
   const fetchSchedules = async () => {
     try {
       const { data, success } = await getAllScheduleSpecifcBarangay(
         user?.barangay?._id || ""
       );
       if (success === true) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        const today = getTodayDayName();
 
-        const todaySchedulesData = data.data.filter((schedule: any) => {
-          const scheduleDate = new Date(schedule.scheduled_collection);
-          scheduleDate.setHours(0, 0, 0, 0);
-          return scheduleDate.getTime() === today.getTime();
-        });
+        const todaySchedulesData = data.data.filter(
+          (schedule: any) =>
+            Array.isArray(schedule.recurring_day) &&
+            schedule.recurring_day.includes(today)
+        );
 
-        const upcomingSchedulesData = data.data.filter((schedule: any) => {
-          const scheduleDate = new Date(schedule.scheduled_collection);
-          scheduleDate.setHours(0, 0, 0, 0);
-          return scheduleDate.getTime() > today.getTime();
-        });
+        const upcomingSchedulesData = data.data.filter(
+          (schedule: any) =>
+            Array.isArray(schedule.recurring_day) &&
+            !schedule.recurring_day.includes(today)
+        );
 
         setSchedules(data.data);
         setTodaySchedules(todaySchedulesData);
@@ -183,12 +199,13 @@ export default function ResidentScheduleScreen() {
                           alignItems="center"
                         >
                           <Text fontWeight="$bold">
-                            {getDayName(schedule?.scheduled_collection)}
+                            {Array.isArray(schedule.recurring_day) && schedule.recurring_day.length > 0
+                              ? schedule.recurring_day
+                                .map((day: string) => day.charAt(0).toUpperCase() + day.slice(1))
+                                .join(", ")
+                              : "—"}
                           </Text>
                         </HStack>
-                        <Text color="$secondary500" size="sm">
-                          {formatDate(schedule?.scheduled_collection)}
-                        </Text>
                         <HStack space="sm" alignItems="center">
                           <Text
                             size="sm"
@@ -256,12 +273,13 @@ export default function ResidentScheduleScreen() {
                           alignItems="center"
                         >
                           <Text fontWeight="$bold">
-                            {getDayName(schedule?.scheduled_collection)}
+                            {Array.isArray(schedule.recurring_day) && schedule.recurring_day.length > 0
+                              ? schedule.recurring_day
+                                .map((day: string) => day.charAt(0).toUpperCase() + day.slice(1))
+                                .join(", ")
+                              : "—"}
                           </Text>
                         </HStack>
-                        <Text color="$secondary500" size="sm">
-                          {formatDate(schedule?.scheduled_collection)}
-                        </Text>
                         <HStack space="sm" alignItems="center">
                           <Text
                             size="sm"
@@ -315,12 +333,13 @@ export default function ResidentScheduleScreen() {
                           alignItems="center"
                         >
                           <Text fontWeight="$bold">
-                            {getDayName(schedule?.scheduled_collection)}
+                            {Array.isArray(schedule.recurring_day) && schedule.recurring_day.length > 0
+                              ? schedule.recurring_day
+                                .map((day: string) => day.charAt(0).toUpperCase() + day.slice(1))
+                                .join(", ")
+                              : "—"}
                           </Text>
                         </HStack>
-                        <Text color="$secondary500" size="sm">
-                          {formatDate(schedule?.scheduled_collection)}
-                        </Text>
                         <HStack space="sm" alignItems="center">
                           <Text
                             size="sm"
@@ -398,15 +417,13 @@ export default function ResidentScheduleScreen() {
                       </Text>
                     </HStack>
                     <HStack justifyContent="space-between">
-                      <Text color="$secondary500">Date:</Text>
-                      <Text fontWeight="$medium">
-                        {formatDate(selectedSchedule?.scheduled_collection)}
-                      </Text>
-                    </HStack>
-                    <HStack justifyContent="space-between">
                       <Text color="$secondary500">Day:</Text>
                       <Text fontWeight="$medium">
-                        {getDayName(selectedSchedule?.scheduled_collection)}
+                        {Array.isArray(selectedSchedule.recurring_day) && selectedSchedule.recurring_day.length > 0
+                          ? selectedSchedule.recurring_day
+                            .map((day: string) => day.charAt(0).toUpperCase() + day.slice(1))
+                            .join(", ")
+                          : "—"}
                       </Text>
                     </HStack>
                     <HStack justifyContent="space-between">
@@ -475,7 +492,7 @@ export default function ResidentScheduleScreen() {
                                 </Text>
                                 <Box
                                   bg={barangay.status === 'Completed' ? '$green500' :
-                                      barangay.status === 'Pending' ? '$yellow500' : '$gray500'}
+                                    barangay.status === 'Pending' ? '$yellow500' : '$gray500'}
                                   px="$2"
                                   py="$1"
                                   borderRadius="$md"

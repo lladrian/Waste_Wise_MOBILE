@@ -1,3 +1,4 @@
+import React, { useState, useEffect, useContext } from "react";
 import {
   Badge,
   BadgeText,
@@ -32,7 +33,6 @@ import {
   Info,
 } from "lucide-react-native";
 import * as Location from "expo-location";
-import React, { useContext, useEffect, useState } from "react";
 import { AppToast } from "@/components/ui/AppToast";
 import { AuthContext } from "@/context/AuthContext";
 import { useFocusEffect } from "@react-navigation/native";
@@ -50,7 +50,6 @@ import { getTodayScheduleSpecificUser } from "../../hooks/schedule_hook";
 
 import { useLocation } from '@/context/LocationContext';
 
-
 export interface AttendanceData {
   _id: string;
   user: any;
@@ -67,10 +66,12 @@ export interface ScheduleData {
   _id: string;
   [key: string]: any;
 }
+
 interface LocationData {
   latitude: number;
   longitude: number;
 }
+
 export default function CollectorAttendanceScreen() {
   const { user } = useContext(AuthContext)!;
   const router = useRouter();
@@ -86,8 +87,7 @@ export default function CollectorAttendanceScreen() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [location, setLocation] = useState<LocationData | null>(null);
-  const { connectWebSocket, fetchTodayScheduleRecords } = useLocation();
-
+  const { connectWebSocket } = useLocation();
 
   useFocusEffect(
     React.useCallback(() => {
@@ -95,7 +95,6 @@ export default function CollectorAttendanceScreen() {
       fetchAttendanceRecords();
       fetchTodayScheduleRecordsMain();
       connectWebSocket();
-      fetchTodayScheduleRecords();
     }, [])
   );
 
@@ -186,7 +185,6 @@ export default function CollectorAttendanceScreen() {
         longitude: currentLocation.coords.longitude,
       };
 
-      // setLocation(locationData);
       return locationData;
     } catch (error) {
       console.error("Error getting location:", error);
@@ -196,7 +194,7 @@ export default function CollectorAttendanceScreen() {
   };
 
   const handleClockIn = async () => {
-    if (isProcessing) return; // Prevent multiple clicks
+    if (isProcessing) return;
     setIsProcessing(true);
 
     const locationExtract = await getCurrentLocation();
@@ -239,7 +237,6 @@ export default function CollectorAttendanceScreen() {
         }
       }
     } catch (error) {
-      console.log(123);
       console.log(error);
       toast.show({
         placement: "top right",
@@ -253,12 +250,12 @@ export default function CollectorAttendanceScreen() {
         ),
       });
     } finally {
-      setIsProcessing(false); // Re-enable button
+      setIsProcessing(false);
     }
   };
 
   const handleClockOut = async () => {
-    if (isProcessing) return; // Prevent multiple clicks
+    if (isProcessing) return;
     setIsProcessing(true);
 
     const locationExtract = await getCurrentLocation();
@@ -268,12 +265,13 @@ export default function CollectorAttendanceScreen() {
         ended_at: getCurrentDateTime(),
         latitude: locationExtract?.latitude,
         longitude: locationExtract?.longitude,
+        task: scheduleRecords?.[0]?.task,
+        schedule_id: scheduleRecords?.[0]?._id || "",
       };
 
       const input_data2 = {
-        status: "Active",
+        status: "Active"
       };
-
 
       const { data, success } = await updateAttendanceTimeOut(user?._id || "", input_data);
 
@@ -312,7 +310,7 @@ export default function CollectorAttendanceScreen() {
         ),
       });
     } finally {
-      setIsProcessing(false); // Re-enable button
+      setIsProcessing(false);
     }
   };
 
@@ -375,6 +373,7 @@ export default function CollectorAttendanceScreen() {
     if (!attendance.ended_at) return "active";
     return "completed";
   };
+
 
   const getStatusColors = (status: string) => {
     switch (status?.toLowerCase()) {
@@ -640,8 +639,8 @@ export default function CollectorAttendanceScreen() {
                   {isProcessing
                     ? "Processing..."
                     : clockAction === "in"
-                    ? "Clock In"
-                    : "Clock Out"}
+                      ? "Clock In"
+                      : "Clock Out"}
                 </ButtonText>
               </Button>
             </HStack>
@@ -777,94 +776,75 @@ export default function CollectorAttendanceScreen() {
                       </Text>
                     </HStack>
                     <HStack justifyContent="space-between">
-                      <Text color="$secondary500">Collection Date:</Text>
+                      <Text color="$secondary500">Collection Day:</Text>
                       <Text fontWeight="$medium">
-                        {formatDate(
-                          selectedAttendance.schedule?.scheduled_collection
-                        )}
+                        {Array.isArray(selectedAttendance.schedule?.recurring_day) &&
+                          selectedAttendance.schedule.recurring_day.length > 0
+                          ? selectedAttendance.schedule.recurring_day
+                            .map((day: string) => day.charAt(0).toUpperCase() + day.slice(1))
+                            .join(", ")
+                          : "—"}
                       </Text>
                     </HStack>
                   </VStack>
 
                   {/* Route Information */}
                   <VStack space="md">
-                      <HStack space="sm" alignItems="center">
-                        <MapPin size={18} color="#666" />
-                        <Text fontWeight="$bold" size="md">
-                          Route Details
-                        </Text>
-                      </HStack>
-		                  <HStack justifyContent="space-between" alignItems="flex-start">
-                        <Text color="$secondary500">Barangays Covered:</Text>
-                      </HStack>
-                      <HStack justifyContent="space-between" alignItems="flex-start">
-                        <VStack
-                          space="xs"
-                          alignItems="flex-start"
-                          flex={1}
-                          maxWidth="100%"
-                        >
-                          {selectedAttendance?.schedule?.task?.map(
-                            (barangay: any, index: number) => (
-                              <HStack
-                                key={barangay._id}
-                                space="sm"
-                                alignItems="center"
-                                width="$full"
-                              >
-                                <Text color="$primary500">•</Text>
-                                <Text
-                                  fontWeight="$medium"
-                                  flex={1}
-                                  numberOfLines={1}
-                                  ellipsizeMode="tail"
-                                >
-                                  {barangay.barangay_id?.barangay_name}
-                                </Text>
-                                <Box
-                                  bg={barangay.status === 'Completed' ? '$green500' :
-                                    barangay.status === 'Pending' ? '$yellow500' : '$gray500'}
-                                  px="$2"
-                                  py="$1"
-                                  borderRadius="$md"
-                                >
-                                  <Text
-                                    color="$white"
-                                    fontSize="$xs"
-                                    fontWeight="$bold"
-                                    textTransform="capitalize"
-                                  >
-                                    {barangay.status}
-                                  </Text>
-                                </Box>
-                              </HStack>
-                            )
-                          )}
-                        </VStack>
-                      </HStack>
-                    </VStack>
-
-                  {/* Additional Information */}
-                  {/* <VStack space="md">
                     <HStack space="sm" alignItems="center">
-                      <Info size={18} color="#666" />
+                      <MapPin size={18} color="#666" />
                       <Text fontWeight="$bold" size="md">
-                        Additional Information
+                        Route Details
                       </Text>
                     </HStack>
-                    <HStack justifyContent="space-between">
-                      <Text color="$secondary500">Attendance ID:</Text>
-                      <Text fontWeight="$medium" size="sm">
-                        {selectedAttendance._id}
-                      </Text>
+                    <HStack justifyContent="space-between" alignItems="flex-start">
+                      <Text color="$secondary500">Barangays Covered:</Text>
                     </HStack>
-                    <HStack justifyContent="space-between">
-                      <Text color="$secondary500">Created:</Text>
-                      <Text fontWeight="$medium">
-                        {formatDateTime(selectedAttendance.created_at)}
-                      </Text>
+                    <HStack justifyContent="space-between" alignItems="flex-start">
+                      <VStack
+                        space="xs"
+                        alignItems="flex-start"
+                        flex={1}
+                        maxWidth="100%"
+                      >
+                        {selectedAttendance?.schedule?.task?.map(
+                          (barangay: any, index: number) => (
+                            <HStack
+                              key={barangay._id}
+                              space="sm"
+                              alignItems="center"
+                              width="$full"
+                            >
+                              <Text color="$primary500">•</Text>
+                              <Text
+                                fontWeight="$medium"
+                                flex={1}
+                                numberOfLines={1}
+                                ellipsizeMode="tail"
+                              >
+                                {barangay.barangay_id?.barangay_name}
+                              </Text>
+                              <Box
+                                bg={barangay.status === 'Complete' ? '$green500' :
+                                  barangay.status === 'Pending' ? '$yellow500' : '$gray500'}
+                                px="$2"
+                                py="$1"
+                                borderRadius="$md"
+                              >
+                                <Text
+                                  color="$white"
+                                  fontSize="$xs"
+                                  fontWeight="$bold"
+                                  textTransform="capitalize"
+                                >
+                                  {barangay.status}
+                                </Text>
+                              </Box>
+                            </HStack>
+                          )
+                        )}
+                      </VStack>
                     </HStack>
-                  </VStack> */}
+                  </VStack>
                 </VStack>
               )}
             </ScrollView>

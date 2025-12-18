@@ -53,12 +53,11 @@ export default function CollectorSettingsScreen() {
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [updatingLocation, setUpdatingLocation] = useState(false);
   const [garbages, setGarbageSites] = useState<GarbageSite[]>([]);
-  const { connectWebSocket, fetchTodayScheduleRecords } = useLocation();
+  const { connectWebSocket } = useLocation();
 
   useFocusEffect(
     React.useCallback(() => {
       connectWebSocket();
-      fetchTodayScheduleRecords();
     }, [])
   );
 
@@ -158,7 +157,7 @@ export default function CollectorSettingsScreen() {
                   </HStack>
                 </Button>
                 </Link>
-                <Button
+                {/* <Button
                   variant="outline"
                   justifyContent="flex-start"
                   action="secondary"
@@ -167,14 +166,14 @@ export default function CollectorSettingsScreen() {
                     <Bell size={20} color="#666" />
                     <Text>Notification Preferences</Text>
                   </HStack>
-                </Button>
+                </Button> */}
               </VStack>
             </Box>
 
             <Divider />
 
             {/* App Settings */}
-            <Box>
+            {/* <Box>
               <Text fontWeight="$bold" mb="$2" color="$secondary500" size="sm">
                 APP
               </Text>
@@ -201,7 +200,7 @@ export default function CollectorSettingsScreen() {
                   </HStack>
                 </Button>
               </VStack>
-            </Box>
+            </Box> */}
 
             <Divider />
 

@@ -1,0 +1,112 @@
+import React, { useState, useContext } from "react";
+import { AuthContext } from "@/context/AuthContext";
+import {
+  AlertDialog,
+  AlertDialogBackdrop,
+  AlertDialogBody,
+  AlertDialogContent,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  Button,
+  ButtonGroup,
+  VStack,
+  Text,
+  Box,
+} from "@gluestack-ui/themed";
+import { LogOut} from "lucide-react-native";
+
+export default function LogoutScreen() {
+  const { logout } = useContext(AuthContext)!;
+  const [showLogoutAlert, setShowLogoutAlert] = useState(false);
+
+  const handleLogout = async () => {
+    setShowLogoutAlert(false);
+    await logout();
+  };
+
+  return (
+    <>
+      <Box
+        flex={1}
+        alignItems="center"
+        justifyContent="center"
+       // px="$6"
+       // bgType="linear"
+       // bgColors={["$red50", "$white"]} 
+       // bgStart={[0, 0]}
+       // bgEnd={[0, 1]}
+      >
+        <VStack space="lg" alignItems="center" px="$6">
+          <Box
+            bg="$red100"
+            p="$6"
+            borderRadius="$full"
+            alignItems="center"
+            justifyContent="center"
+          >
+            <LogOut size={48} color="#b91c1c" />
+          </Box>
+
+          {/* Title */}
+          <Text size="2xl" fontWeight="$bold" color="$red700">
+            Log Out
+          </Text>
+
+          {/* Subtitle */}
+          <Text textAlign="center" color="$secondary600" px="$4">
+            You’re about to log out of your account.{"\n"}
+            Are you sure you want to continue?
+          </Text>
+
+          {/* Logout Button */}
+          <Button
+            action="negative"
+            w="$40"
+            borderRadius="$full"
+            onPress={() => setShowLogoutAlert(true)}
+          >
+            <Text color="$white" fontWeight="$bold">
+              Log Out
+            </Text>
+          </Button>
+        </VStack>
+      </Box>
+
+      <AlertDialog
+        isOpen={showLogoutAlert}
+        onClose={() => setShowLogoutAlert(false)}
+      >
+        <AlertDialogBackdrop />
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <Text fontWeight="$bold" size="lg">
+              Confirm Logout
+            </Text>
+          </AlertDialogHeader>
+
+          <AlertDialogBody>
+            <Text>
+              Are you sure you want to log out? You’ll need to sign in again to
+              access your account.
+            </Text>
+          </AlertDialogBody>
+
+          <AlertDialogFooter>
+            <ButtonGroup space="lg">
+              <Button
+                variant="outline"
+                action="secondary"
+                onPress={() => setShowLogoutAlert(false)}
+              >
+                <Text>Cancel</Text>
+              </Button>
+              <Button action="negative" onPress={handleLogout}>
+                <Text color="$white">Log Out</Text>
+              </Button>
+            </ButtonGroup>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}

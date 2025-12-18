@@ -10,8 +10,8 @@ import { createGarbageReport } from "../../../hooks/report_hook";
 
 interface ReportFormData {
   notes: string | undefined;
-  garbage_type: 'biodegradable' | 'non_biodegradable' | 'recyclable' | 'other';
-  report_type: 'uncollected' | 'overflowing' | 'illegal_dumping' | 'missed_route' | 'other';
+  garbage_type: string;
+  report_type: string;
 }
 
 export default function ResidentCreateReportScreen() {
@@ -20,8 +20,8 @@ export default function ResidentCreateReportScreen() {
   const router = useRouter();
   const [formData, setFormData] = useState<ReportFormData>({
     notes: '',
-    garbage_type: 'biodegradable',
-    report_type: 'uncollected'
+    garbage_type: '',
+    report_type: ''
   });
   const [loading, setLoading] = useState<boolean>(false);
 
@@ -84,7 +84,7 @@ export default function ResidentCreateReportScreen() {
         <VStack space="md">
           <VStack space="sm">
             <Text fontWeight="$bold">Report Type</Text>
-            <Select onValueChange={(value: string) => setFormData({...formData, report_type: value as 'uncollected' | 'overflowing' | 'illegal_dumping' | 'missed_route' | 'other'})}>
+            <Select onValueChange={(value: string) => setFormData({...formData, report_type: value})}>
               <SelectTrigger>
                 <SelectInput placeholder="Select Report Type" />
               </SelectTrigger>
@@ -106,7 +106,7 @@ export default function ResidentCreateReportScreen() {
 
           <VStack space="sm">
             <Text fontWeight="$bold">Garbage Type</Text>
-            <Select onValueChange={(value: string) => setFormData({...formData, garbage_type: value as 'biodegradable' | 'non_biodegradable' | 'recyclable' | 'other'})}>
+            <Select onValueChange={(value: string) => setFormData({...formData, garbage_type: value})}>
               <SelectTrigger>
                 <SelectInput placeholder="Select Garbage Type" />
               </SelectTrigger>

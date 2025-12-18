@@ -23,7 +23,6 @@ export default function CollectorSettingsLayout() {
             title: "Settings",
           }}
         />
-        collector-
         <Stack.Screen
           name="collector-login_history"
           options={{

@@ -42,10 +42,10 @@ export default function Login() {
 
   const getDeviceInfo = () => {
     const { width } = Dimensions.get('window');
-    
+
     const isTablet = width >= 768;
     const isDesktop = width >= 1024;
-    
+
     let deviceType = 'mobile';
     if (isDesktop) deviceType = 'desktop';
     else if (isTablet) deviceType = 'tablet';
@@ -93,14 +93,14 @@ export default function Login() {
     try {
       const deviceInfo = getDeviceInfo();
 
-      const { data, success } = await loginUser({ 
-        email, 
+      const { data, success } = await loginUser({
+        email,
         password,
-        device: deviceInfo.device, 
-        platform: deviceInfo.platform, 
-        os: deviceInfo.os 
+        device: deviceInfo.device,
+        platform: deviceInfo.platform,
+        os: deviceInfo.os
       });
-  
+
       if (success === true) {
         if (data.data.user.is_verified === false) {
           setPendingEmail(data.data.user.email);
@@ -223,13 +223,35 @@ export default function Login() {
                 <Link href="/auth/account_recovery" asChild>
                   <Text color="$primary500">Forgot Password?</Text>
                 </Link>
-
+{/* 
                 <Text color="$secondary500">
                   Don&apos;t have an account?{" "}
                   <Link href="/auth/signup">
                     <Text color="$primary500">Sign up</Text>
                   </Link>
-                </Text>
+                </Text> */}
+
+                {/* Continue as Guest Button */}
+                <Button
+                  mt="$4"
+                  bg="#F3F4F6"        // light gray
+                  px="$6"
+                  py="$2.5"
+                  rounded="$full"
+                  width="100%"
+                  onPress={() => router.replace("/guest/guest-track_collectors")}
+                  style={{
+                    shadowColor: "#000",
+                    shadowOpacity: 0.15,
+                    shadowRadius: 6,
+                    shadowOffset: { width: 0, height: 3 },
+                    elevation: 3,
+                  }}
+                >
+                  <Text color="#1F2937" fontWeight="$bold" fontSize="$md">
+                    Continue as Guest
+                  </Text>
+                </Button>
               </VStack>
             </VStack>
           </ScrollView>

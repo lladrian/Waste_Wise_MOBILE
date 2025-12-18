@@ -3,6 +3,8 @@ import {
   Clock,
   Flag,
   Home,
+  Truck,
+  Calendar,
   MapPin,
   Settings as SettingsIcon,
 } from "lucide-react-native";
@@ -59,9 +61,18 @@ export default function CollectorLayout() {
         name="collector-schedule"
         options={{
           title: "Schedule",
-          tabBarIcon: ({ color, size }) => <Flag color={color} size={size} />,
+          tabBarIcon: ({ color, size }) => <Calendar  color={color} size={size} />,
         }}
       />
+
+      {/* <Tabs.Screen
+        name="collector-truck_logs"
+        options={{
+          title: "Truck Logs",
+          tabBarLabel: "Logs",
+          tabBarIcon: ({ color, size }) => <Truck color={color} size={size} />,
+        }}
+      /> */}
 
       <Tabs.Screen
         name="collector-report"

@@ -1,0 +1,571 @@
+import {
+  Badge,
+  BadgeText,
+  Box,
+  Button,
+  Card,
+  HStack,
+  ScrollView,
+  Text as GSText, 
+  useToast,
+  VStack,
+  Progress,
+  ProgressFilledTrack,
+} from "@gluestack-ui/themed";
+import { View, Text } from "react-native"; // ✅ pure React Native primitives
+
+import { Link, useRouter } from "expo-router";
+import React, { useEffect, useState, useRef, useContext } from "react";
+import MapView, { Marker, Callout, Polyline } from "react-native-maps";
+import { useOffline } from "../../context/OfflineContext";
+import {
+  mockUser,
+  staticCollectors,
+  staticSchedule,
+} from "../../data/staticData";
+
+import {
+  AlertTriangle,
+  MapPin,
+  Calendar,
+  Flag,
+  Truck,
+  User,
+  BarChart3,
+  Clock,
+  CheckCircle2,
+  AlertCircle,
+  Bell,
+} from "lucide-react-native"; // Added Bell icon
+import { useFocusEffect } from "@react-navigation/native";
+import { getAllDataDashboardGuest } from "../../hooks/dashboard_hook";
+
+import { AuthContext } from "@/context/AuthContext";
+
+import { AppToast } from "@/components/ui/AppToast";
+import truckIcon from "../../assets/truck.png";
+
+export interface ScheduleData {
+  _id: string;
+  [key: string]: any;
+}
+
+export default function GuestDashboard() {
+  // const { user } = useContext(AuthContext)!;
+  const router = useRouter();
+  const toast = useToast();
+  const [schedules, setSchedules] = useState<ScheduleData[]>([]);
+  const ws = useRef<WebSocket | null>(null);
+
+  // Use static data instead of API call
+  const collectors = staticCollectors;
+
+  // Mock data for dashboard stats
+  const [dashboardStats, setDashboardStats] = useState({
+    totalReports: 0,
+    completedReports: 0,
+    pendingReports: 0,
+    totalSchedules: 0,
+    upcomingSchedules: 0,
+    todaySchedules: 0,
+    activeCollectors: 0,
+    onRouteCollectors: 0,
+    totalCollectors: 0,
+  });
+
+  // Add state for notification count
+  const [notificationCount, setNotificationCount] = useState(0);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchDataDashboard();
+    }, [])
+  );
+
+  function getTodayDayName(): string {
+    const now: Date = new Date();
+    const utc: number = now.getTime() + now.getTimezoneOffset() * 60000;
+    const philippinesTime: Date = new Date(utc + 8 * 3600000);
+    const days: string[] = [
+      "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
+    ];
+    const dayName: string = days[philippinesTime.getDay()];
+    return dayName.toLowerCase();
+  }
+
+  // Helper function to get route points from schedule
+  const getRoutePoints = (schedule: any) => {
+    return schedule?.route?.route_points || [];
+  };
+
+  // Helper function to render polylines for a schedule
+  const renderSchedulePolylines = (schedule: ScheduleData) => {
+    const routePoints = getRoutePoints(schedule);
+    
+    if (!routePoints || routePoints.length === 0) return null;
+
+    // Filter out invalid points
+    const validPoints = routePoints
+      .filter((point: any) => point && point.lat && point.lng)
+      .map((point: any) => ({
+        latitude: point.lat,
+        longitude: point.lng,
+      }));
+
+    if (validPoints.length === 0) return null;
+
+    return (
+      <Polyline
+        key={`polyline-${schedule._id}`}
+        coordinates={validPoints}
+        strokeColor={schedule?.route?.polyline_color || "#00008B"}
+        strokeWidth={3}
+        // strokeOpacity={0.6}
+      />
+    );
+  };
+
+  // Function to render all polylines
+  const renderAllPolylines = () => {
+    return schedules.map(schedule => renderSchedulePolylines(schedule));
+  };
+
+  // WebSocket connection for real-time updates
+  useEffect(() => {
+    // Connect to WebSocket
+    ws.current = new WebSocket("wss://waste-wise-backend-uzub.onrender.com");
+
+    ws.current.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        switch (message.name) {
+          case "trucks":
+            const onRouteTrucks = message.data.filter((schedule: any) => {
+              return (
+                schedule.recurring_day === getTodayDayName() 
+              );
+            });
+
+           // const list = user?.role !== "guest" ? message.data : onRouteTrucks;
+
+            const list = onRouteTrucks;
+
+            setSchedules(list);
+            break;
+          default:
+            console.log("Unknown WebSocket message:", message.name);
+        }
+      } catch (error) {
+        console.error("Error parsing WebSocket message:", error);
+      }
+    };
+
+    ws.current.onopen = () => {
+      console.log("WebSocket connected for schedules");
+    };
+
+    ws.current.onclose = () => {
+      console.log("WebSocket disconnected for schedules");
+    };
+
+    ws.current.onerror = (error) => {
+      // console.error("WebSocket error:", error);
+    };
+
+    return () => {
+      if (ws.current) {
+        ws.current.close();
+      }
+    };
+  }, []);
+
+  const fetchDataDashboard = async () => {
+    try {
+      const { data, success } = await getAllDataDashboardGuest();
+
+      if (success === true) {
+        const todaySchedulesData = data?.data.filter(
+          (schedule: any) => {
+            return schedule.recurring_day === getTodayDayName();
+          }
+        );
+
+        const upcomingSchedulesData = data?.data.filter(
+          (schedule: any) => {
+            return schedule.recurring_day !== getTodayDayName();
+          }
+        );
+
+        const onRouteTrucksCount = data?.data.filter(
+          (schedule: any) => {
+            return (
+              schedule.recurring_day === getTodayDayName() &&
+              schedule.truck?.status === "On Route"
+            );
+          }
+        );
+
+        const activeTrucksCount = data?.data.filter(
+          (schedule: any) => {
+            return (
+              schedule.recurring_day === getTodayDayName() &&
+              schedule.truck?.status === "Active"
+            );
+          }
+        );
+
+
+        const todayTrucksCount = data?.data.filter(
+          (schedule: any) => {
+            return (
+              schedule.recurring_day === getTodayDayName()
+            );
+          }
+        );
+
+        setDashboardStats((prevStats) => ({
+          ...prevStats,
+          totalSchedules: data.data.length,
+          upcomingSchedules: upcomingSchedulesData.length,
+          todaySchedules: todaySchedulesData.length,
+          activeCollectors: activeTrucksCount.length,
+          onRouteCollectors: onRouteTrucksCount.length,
+          totalCollectors: todayTrucksCount.length,
+        }));
+
+        const onRouteTrucks = data.data.filter((schedule: any) => {
+          return (
+            schedule.recurring_day === getTodayDayName() 
+          );
+        });
+
+        // const list = user?.role !== "guest" ? data.data : onRouteTrucks;
+        const list = onRouteTrucks;
+
+        setSchedules(list);
+      }
+    } catch (error) {
+      console.log(error)
+      toast.show({
+        placement: "top right",
+        render: ({ id }) => (
+          <AppToast
+            id={id}
+            type="error"
+            title="Error"
+            description="1Failed to load garbage report."
+          />
+        ),
+      });
+    }
+  };
+
+  // Helper function to capitalize each word
+  const capitalizeName = (name?: string) => {
+    if (!name) return "";
+    return name
+      .split(" ")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(" ");
+  };
+
+  // Function to handle notification button press
+  const handleNotificationPress = () => {
+    router.push("/notification"); // Adjust the route as needed
+  };
+
+  return (
+    <ScrollView flex={1} bg="$white">
+      <VStack space="lg" p="$4">
+        <Card bg="$primary50" p="$4" borderColor="$primary200">
+          <HStack justifyContent="space-between" alignItems="flex-start">
+            <VStack space="xs" flex={1}>
+              <HStack justifyContent="space-between" alignItems="center">
+                <GSText size="2xl" fontWeight="$bold" color="$primary900">
+                  Welcome back, Guest!
+                </GSText>
+              </HStack>
+
+              <HStack space="sm" alignItems="center" mt="$2">
+                <GSText color="$error600" size="sm" fontWeight="$medium">
+                  Guest Mode - Limited functionality
+                </GSText>
+              </HStack>
+            </VStack>
+          </HStack>
+        </Card>
+
+        <VStack space="md">
+          <GSText size="lg" fontWeight="$bold" color="$secondary800">
+            Overview
+          </GSText>
+
+          <HStack space="md" flexWrap="wrap">
+            {/* <Card
+              flex={1}
+              minWidth="$32"
+              p="$3"
+              bg="$purple50"
+              borderColor="$purple200"
+            >
+              <VStack space="xs" alignItems="center">
+                <Box bg="$purple100" p="$2" rounded="$full">
+                  <Calendar size={20} color="#7C3AED" />
+                </Box>
+                <GSText fontWeight="$bold" color="$purple900" size="xl">
+                  {dashboardStats.totalSchedules}
+                </GSText>
+                <GSText color="$purple700" size="sm" textAlign="center">
+                  Total Schedules
+                </GSText>
+              </VStack>
+            </Card> */}
+
+            {/* <Card
+              flex={1}
+              minWidth="$32"
+              p="$3"
+              bg="$green50"
+              borderColor="$green200"
+            >
+              <VStack space="xs" alignItems="center">
+                <Box bg="$green100" p="$2" rounded="$full">
+                  <Calendar size={20} color="#059669" />
+                </Box>
+                <GSText fontWeight="$bold" color="$green900" size="xl">
+                  {dashboardStats.upcomingSchedules}
+                </GSText>
+                <GSText color="$green700" size="sm" textAlign="center">
+                  Upcoming Schedules
+                </GSText>
+              </VStack>
+            </Card> */}
+
+            <Card
+              flex={1}
+              minWidth="$32"
+              p="$3"
+              bg="$green50"
+              borderColor="$green200"
+            >
+              <VStack space="xs" alignItems="center">
+                <Box bg="$green100" p="$2" rounded="$full">
+                  <Calendar size={20} color="#059669" />
+                </Box>
+                <GSText fontWeight="$bold" color="$green900" size="xl">
+                  {dashboardStats.todaySchedules}
+                </GSText>
+                <GSText color="$green700" size="sm" textAlign="center">
+                  Today Schedules
+                </GSText>
+              </VStack>
+            </Card>
+          </HStack>
+
+          <HStack space="md" flexWrap="wrap">
+            {/* Collectors Card */}
+            <Card
+              flex={1}
+              minWidth="$32"
+              p="$3"
+              bg="$orange50"
+              borderColor="$orange200"
+            >
+              <VStack space="xs" alignItems="center">
+                <Box bg="$orange100" p="$2" rounded="$full">
+                  <Truck size={20} color="#EA580C" />
+                </Box>
+                <GSText fontWeight="$bold" color="$orange900" size="xl">
+                  {dashboardStats.onRouteCollectors}
+                </GSText>
+                <GSText color="$orange700" size="sm" textAlign="center">
+                  On Route
+                </GSText>
+              </VStack>
+            </Card>
+          </HStack>
+
+             <HStack space="md" flexWrap="wrap">
+            {/* Collectors Card */}
+            <Card
+              flex={1}
+              minWidth="$32"
+              p="$3"
+              bg="$blue50"
+              borderColor="$blue200"
+            >
+              <VStack space="xs" alignItems="center">
+                <Box bg="$blue100" p="$2" rounded="$full">
+                  <Truck size={20} color="#3B82F6" />
+                </Box>
+                <GSText fontWeight="$bold" color="$blue900" size="xl">
+                  {dashboardStats.activeCollectors}
+                </GSText>
+                <GSText color="$blue700" size="sm" textAlign="center">
+                  Available
+                </GSText>
+              </VStack>
+            </Card>
+          </HStack>
+
+          <HStack space="md" flexWrap="wrap">
+            {/* Collectors Card */}
+            <Card
+              flex={1}
+              minWidth="$32"
+              p="$3"
+              bg="$gray50"
+              borderColor="$gray200"
+            >
+              <VStack space="xs" alignItems="center">
+                <Box bg="$gray100" p="$2" rounded="$full">
+                  <Truck size={20} color="#6b7280" />
+                </Box>
+                <GSText fontWeight="$bold" color="$gray900" size="xl">
+                  {dashboardStats.totalCollectors}
+                </GSText>
+                <GSText color="$gray700" size="sm" textAlign="center">
+                  Trucks
+                </GSText>
+              </VStack>
+            </Card>
+          </HStack>
+        </VStack>
+
+        <Card p="$4" borderColor="$primary200">
+          <HStack justifyContent="space-between" alignItems="center" mb="$4">
+            <VStack space="xs">
+              <GSText size="lg" fontWeight="$bold" color="$secondary800">
+                Live Collector Tracking
+              </GSText>
+              <GSText color="$secondary500" size="sm">
+                Real-time garbage truck locations
+              </GSText>
+            </VStack>
+            <Link href="/guest/guest-track_collectors" asChild>
+              <Button size="sm" variant="link">
+                <GSText color="$primary600">View All</GSText>
+              </Button>
+            </Link>
+          </HStack>
+
+          <Box h={300} borderRadius="$lg" overflow="hidden" mb="$3">
+            <MapView
+              style={{ flex: 1 }}
+              initialRegion={{
+                latitude: 10.936,
+                longitude: 124.609,
+                latitudeDelta: 0.02,
+                longitudeDelta: 0.02,
+              }}
+              showsUserLocation={false}
+            >
+              {renderAllPolylines()}
+
+              {/* Render markers */}
+              {schedules.map((schedule, index) => (
+                <Marker
+                  key={schedule._id}
+                  title={`Truck ID: ${schedule?.truck?.truck_id}`}
+                  coordinate={{
+                    latitude: schedule?.truck?.position?.lat,
+                    longitude: schedule?.truck?.position?.lng,
+                  }}
+                  description={`${schedule?.garbage_type} - ${schedule?.truck?.status}`}
+                  image={truckIcon}
+                >
+                  <Callout>
+                    <View style={{ padding: 10, minWidth: 200 }}>
+                      <Text style={{ fontWeight: 'bold', marginBottom: 5 }}>
+                        {schedule?.truck?.truck_id || 'Unknown Truck'}
+                      </Text>
+                      <Text>Type: {schedule?.garbage_type || 'Unknown'}</Text>
+                      <Text>Status: {schedule?.truck?.status || 'Unknown'}</Text>
+                      <Text>Route: {schedule?.route?.route_name || 'No Route'}</Text>
+                      <Text style={{ color: schedule?.route?.polyline_color || '#00008B', marginTop: 5 }}>
+                        Route Color: {schedule?.route?.polyline_color || '#00008B'}
+                      </Text>
+                    </View>
+                  </Callout>
+                </Marker>
+              ))}
+            </MapView>
+          </Box>
+
+          {schedules.length > 0 && (
+            <Card bg="$gray100" mb="$3">
+              <VStack space="sm">
+                <GSText fontWeight="$bold" size="sm">Route Colors</GSText>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <HStack space="sm">
+                    {schedules.filter((schedule, index, self) => 
+                      index === self.findIndex(s => 
+                        s?.route?.polyline_color === schedule?.route?.polyline_color
+                      )
+                    ).map((schedule) => (
+                      schedule?.route?.polyline_color && (
+                        <HStack key={schedule._id} space="xs" alignItems="center" mr="$3">
+                          <Box 
+                            w="$3" 
+                            h="$3" 
+                            bg={schedule?.route?.polyline_color} 
+                            rounded="$sm"
+                          />
+                          <GSText size="xs">
+                            {schedule?.route?.route_name || 'Unknown Route'}
+                          </GSText>
+                        </HStack>
+                      )
+                    ))}
+                  </HStack>
+                </ScrollView>
+              </VStack>
+            </Card>
+          )}
+
+          <VStack space="sm">
+            {schedules.map((schedule) => (
+              <HStack
+                key={schedule._id}
+                space="md"
+                alignItems="center"
+                p="$2"
+                bg="$secondary50"
+                rounded="$md"
+              >
+                <VStack flex={1} space="xs">
+                  <GSText size="sm" fontWeight="$medium">
+                    {`${capitalizeName(schedule.truck?.user?.first_name)} ${capitalizeName(schedule.truck?.user?.middle_name)} ${capitalizeName(schedule.truck?.user?.last_name)}`}
+                  </GSText>
+                  <GSText size="xs" color="$secondary600">
+                    {schedule.truck?.truck_id} - {schedule.garbage_type}
+                  </GSText>
+                  {schedule?.route?.route_name && (
+                    <HStack space="xs" alignItems="center">
+                      <Box 
+                        w="$2" 
+                        h="$2" 
+                        bg={schedule?.route?.polyline_color || "#00008B"} 
+                        rounded="$sm"
+                      />
+                      <GSText size="xs" color="$secondary600">
+                        {schedule?.route?.route_name}
+                      </GSText>
+                    </HStack>
+                  )}
+                </VStack>
+                {schedule.truck?.status && (
+                  <Badge size="sm" action={schedule.truck.status === "On Route" ? "error" : "success"}>
+                    <Box w="$2" h="$2" bg="$success500" rounded="$full" />
+                    <BadgeText size="xs"> {schedule.truck.status}</BadgeText>
+                  </Badge>
+                )}
+              </HStack>
+            ))}
+          </VStack>
+
+        </Card>
+      </VStack>
+    </ScrollView>
+  );
+}

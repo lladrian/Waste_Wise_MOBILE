@@ -24,8 +24,14 @@ export default function Index() {
   }
 
   if (!user) {
-    return <Redirect href="/auth/login" />;
+    // return <Redirect href="/auth/login" />;
+    return <Redirect href="/guest/guest-track_collectors" />;
   }
+
+  // if (user.role === "guest") {
+  //   console.log('guest')
+  //   return <Redirect href="/guest/guest-index" />;
+  // }
 
   if (user.role === "resident") {
     console.log('resident')
@@ -39,5 +45,6 @@ export default function Index() {
   }
 
   // Fallback redirect
-  return <Redirect href="/auth/login" />;
+  // return <Redirect href="/auth/login" />;
+  return <Redirect href="/guest/guest-track_collectors" />;
 }

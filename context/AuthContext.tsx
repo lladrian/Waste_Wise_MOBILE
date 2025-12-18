@@ -56,7 +56,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     );
     return encrypted.toString();
   };
-  
+
   const decryptData = (cipher: string) => {
     try {
       const decrypted = CryptoJS.AES.decrypt(cipher, SECRET_KEY, {
@@ -85,22 +85,33 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const userEnc = await AsyncStorage.getItem("user_data");
       const timeEnc = await AsyncStorage.getItem("logged_in_at");
 
-      if (!userEnc || !timeEnc) return logout();
+      if (!userEnc || !timeEnc) {
+        setUser(null);
+        return;
+      }
 
       const userData = decryptData(userEnc);
       const dateStr = decryptData(timeEnc);
 
       const loginDate = parseCustomDate(dateStr);
-      if (!userData || !loginDate) return logout();
+      
+      if (!userData || !loginDate) {
+        setUser(null);
+        return;
+      }
 
       const expiry = loginDate.getTime() + 30 * 60 * 1000;
-      if (Date.now() > expiry) return logout();
+      if (Date.now() > expiry) {
+        setUser(null);
+        return;
+      }
 
       setUser(userData);
     } finally {
       setLoading(false);
     }
   };
+
 
   useEffect(() => {
     fetchAuthData();
@@ -121,7 +132,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     console.log("logout12");
     setUser(null);
     await AsyncStorage.clear();
-    router.replace("/auth/login");
+    // router.replace("/auth/login");
+    // router.replace("/home");
+    // router.replace("/guest/guest-index");
+    router.replace("/guest/guest-track_collectors");
     return;
   };
 

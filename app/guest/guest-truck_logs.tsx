@@ -1,0 +1,1154 @@
+import React, { useState, useEffect, useContext, useRef } from "react";
+import {
+  Badge,
+  BadgeText,
+  Box,
+  Button,
+  ButtonText,
+  Card,
+  HStack,
+  ScrollView,
+  Text,
+  VStack,
+  Input,
+  InputField,
+  InputIcon,
+  Divider,
+  Modal,
+  ModalBackdrop,
+  ModalContent,
+  ModalHeader,
+  ModalBody,
+  ModalCloseButton,
+  Icon,
+  CloseIcon as GluestackCloseIcon,
+} from "@gluestack-ui/themed";
+import { Alert, TouchableOpacity, Dimensions } from "react-native";
+import { AppToast } from "@/components/ui/AppToast";
+import { useToast } from "@gluestack-ui/themed";
+import { AuthContext } from "@/context/AuthContext";
+import { getAllAttendance } from "../../hooks/attendance_hook";
+import { useFocusEffect } from "@react-navigation/native";
+import {
+  Search,
+  Filter,
+  Truck,
+  MapPin,
+  Calendar,
+  User,
+  Clock,
+  CheckCircle,
+  XCircle,
+  Activity,
+  X as CloseIcon,
+  X,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react-native";
+
+export interface AttendanceData {
+  _id: string;
+  position_start: { lat: number; lng: number };
+  position_end: { lat: number; lng: number };
+  user: any;
+  truck: any;
+  schedule: {
+    _id: string;
+    route: {
+      _id: string;
+      route_name: string;
+      polyline_color: string;
+      route_points: Array<{ lat: number; lng: number }>;
+      merge_barangay: Array<{ barangay_id: any; order_index: number }>;
+    };
+    garbage_type: string;
+    recurring_day: string[];
+    task: Array<{
+      barangay_id: any;
+      order_index: number;
+      status: string;
+    }>;
+    status: string;
+  };
+  started_at: string;
+  ended_at: string;
+  flag: number;
+  task: Array<{
+    barangay_id: any;
+    order_index: number;
+    status: string;
+  }>;
+  route_history: Array<{
+    position: { lat: number; lng: number };
+    route_status: string;
+    created_at: string;
+  }>;
+  [key: string]: any;
+}
+
+export default function GuestTrackCollectorsScreen() {
+  const toast = useToast();
+  const { width, height } = Dimensions.get('window');
+  const { user } = useContext(AuthContext)!;
+
+  // State
+  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceData[]>([]);
+  const [filteredAttendance, setFilteredAttendance] = useState<AttendanceData[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [selectedAttendance, setSelectedAttendance] = useState<AttendanceData | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+
+  // Filter states
+  const [filters, setFilters] = useState({
+    status: "all",
+    garbageType: "all",
+    routeName: "all",
+    driverName: "all",
+    scheduleDay: "all",
+    barangay: "all", // Added barangay filter
+  });
+
+  const [availableFilters, setAvailableFilters] = useState({
+    statuses: ["all", "Active", "On Route", "Inactive"],
+    garbageTypes: ["all"],
+    routeNames: ["all"],
+    driverNames: ["all"],
+    scheduleDays: ["all", "sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"],
+    barangays: ["all"], // Added barangays filter
+  });
+
+  // Store barangay name mapping
+  const [barangayMap, setBarangayMap] = useState<Map<string, string>>(new Map());
+
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchAttendance();
+    }, [])
+  );
+
+  function getTodayDayName(): string {
+    const now: Date = new Date();
+    const utc: number = now.getTime() + now.getTimezoneOffset() * 60000;
+    const philippinesTime: Date = new Date(utc + 8 * 3600000);
+    const days: string[] = [
+      "sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"
+    ];
+    return days[philippinesTime.getDay()];
+  }
+
+  const fetchAttendance = async () => {
+    try {
+      setIsLoading(true);
+      const { data, success } = await getAllAttendance();
+      if (success === true) {
+        // Filter attendance records for today's schedule
+        // const todayAttendance = data.data.filter(
+        //   (attendance: any) =>
+        //     attendance?.schedule?.recurring_day?.includes(getTodayDayName())
+        // );
+        processAttendance(data.data);
+
+        // processAttendance(todayAttendance);
+      }
+    } catch (error) {
+      console.error("Fetch attendance error:", error);
+      showToast("Failed to load attendance records", "error");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const processAttendance = (data: AttendanceData[]) => {
+    console.log("Processed attendance records:", data.length);
+    setAttendanceRecords(data);
+    updateAvailableFilters(data);
+    applyFilters(data, filters, searchTerm);
+  };
+
+  const updateAvailableFilters = (data: AttendanceData[]) => {
+    const garbageTypes = ["all", ...new Set(data.map(item =>
+      item.schedule?.garbage_type || "Unknown"
+    ).filter(Boolean))];
+
+    const routeNames = ["all", ...new Set(data.map(item =>
+      item.schedule?.route?.route_name || "No Route"
+    ).filter(Boolean))];
+
+    const driverNames = ["all", ...new Set(data.map(item =>
+      item.user ?
+        `${item.user.first_name || ""} ${item.user.last_name || ""}`.trim() :
+        "No Driver"
+    ).filter(Boolean))];
+
+    const statuses = ["all", ...new Set(data.map(item =>
+      item.truck?.status || "Unknown"
+    ).filter(Boolean))];
+
+    // Extract unique barangays from tasks
+    const barangaysSet = new Set<string>();
+    const newBarangayMap = new Map<string, string>();
+
+    data.forEach(attendance => {
+      // Check current task barangays
+      if (attendance?.task && Array.isArray(attendance.task)) {
+        attendance.task.forEach((task: any) => {
+          if (task?.barangay_id?._id && task?.barangay_id?.barangay_name) {
+            barangaysSet.add(task.barangay_id._id);
+            newBarangayMap.set(task.barangay_id._id, task.barangay_id.barangay_name);
+          }
+        });
+      }
+
+      // Check schedule task barangays
+      if (attendance?.schedule?.task && Array.isArray(attendance.schedule.task)) {
+        attendance.schedule.task.forEach((task: any) => {
+          if (task?.barangay_id?._id && task?.barangay_id?.barangay_name) {
+            barangaysSet.add(task.barangay_id._id);
+            newBarangayMap.set(task.barangay_id._id, task.barangay_id.barangay_name);
+          }
+        });
+      }
+
+      // Check route merge barangays
+      if (attendance?.schedule?.route?.merge_barangay && Array.isArray(attendance.schedule.route.merge_barangay)) {
+        attendance.schedule.route.merge_barangay.forEach((mergeBarangay: any) => {
+          if (mergeBarangay?.barangay_id?._id && mergeBarangay?.barangay_id?.barangay_name) {
+            barangaysSet.add(mergeBarangay.barangay_id._id);
+            newBarangayMap.set(mergeBarangay.barangay_id._id, mergeBarangay.barangay_id.barangay_name);
+          }
+        });
+      }
+    });
+
+    const barangays = ["all", ...Array.from(barangaysSet)];
+
+    setBarangayMap(newBarangayMap);
+    setAvailableFilters(prev => ({
+      ...prev,
+      garbageTypes,
+      routeNames,
+      driverNames,
+      statuses,
+      barangays,
+    }));
+  };
+
+  const applyFilters = (data: AttendanceData[], filterState: any, search: string) => {
+    let filtered = [...data];
+
+    if (search) {
+      const searchLower = search.toLowerCase();
+      filtered = filtered.filter(attendance => {
+        return (
+          attendance.truck?.truck_id?.toLowerCase().includes(searchLower) ||
+          attendance.schedule?.route?.route_name?.toLowerCase().includes(searchLower) ||
+          attendance.schedule?.garbage_type?.toLowerCase().includes(searchLower) ||
+          `${attendance.user?.first_name || ""} ${attendance.user?.last_name || ""}`
+            .toLowerCase().includes(searchLower) ||
+          attendance.schedule?.route?.merge_barangay?.some((barangay: any) =>
+            barangay.barangay_id?.barangay_name?.toLowerCase().includes(searchLower)
+          ) ||
+          // Search in task barangays
+          attendance?.task?.some((task: any) =>
+            task.barangay_id?.barangay_name?.toLowerCase().includes(searchLower)
+          ) ||
+          // Search in schedule task barangays
+          attendance?.schedule?.task?.some((task: any) =>
+            task.barangay_id?.barangay_name?.toLowerCase().includes(searchLower)
+          )
+        );
+      });
+    }
+
+    if (filterState.status !== "all") {
+      filtered = filtered.filter(
+        attendance => attendance.truck?.status === filterState.status
+      );
+    }
+
+    if (filterState.garbageType !== "all") {
+      filtered = filtered.filter(
+        attendance => attendance.schedule?.garbage_type === filterState.garbageType
+      );
+    }
+
+    if (filterState.routeName !== "all") {
+      filtered = filtered.filter(
+        attendance => attendance.schedule?.route?.route_name === filterState.routeName
+      );
+    }
+
+    if (filterState.driverName !== "all") {
+      filtered = filtered.filter(attendance => {
+        const driverName = attendance.user ?
+          `${attendance.user.first_name || ""} ${attendance.user.last_name || ""}`.trim() :
+          "No Driver";
+        return driverName === filterState.driverName;
+      });
+    }
+
+    if (filterState.scheduleDay !== "all") {
+      filtered = filtered.filter(
+        attendance =>
+          Array.isArray(attendance.schedule?.recurring_day) &&
+          attendance.schedule.recurring_day.includes(filterState.scheduleDay)
+      );
+    }
+
+    if (filterState.barangay !== "all") {
+      filtered = filtered.filter(attendance => {
+        // Check if attendance has the selected barangay in any task
+        const hasBarangayInTask = attendance?.task?.some((task: any) =>
+          task?.barangay_id?._id === filterState.barangay
+        );
+
+        // Check if attendance has the selected barangay in schedule task
+        const hasBarangayInScheduleTask = attendance?.schedule?.task?.some((task: any) =>
+          task?.barangay_id?._id === filterState.barangay
+        );
+
+        // Check if attendance has the selected barangay in route merge barangays
+        const hasBarangayInRoute = attendance?.schedule?.route?.merge_barangay?.some((mergeBarangay: any) =>
+          mergeBarangay?.barangay_id?._id === filterState.barangay
+        );
+
+        return hasBarangayInTask || hasBarangayInScheduleTask || hasBarangayInRoute;
+      });
+    }
+
+    setFilteredAttendance(filtered);
+  };
+
+  const handleFilterChange = (filterName: string, value: string) => {
+    const newFilters = { ...filters, [filterName]: value };
+    setFilters(newFilters);
+    applyFilters(attendanceRecords, newFilters, searchTerm);
+  };
+
+  const handleSearch = (text: string) => {
+    setSearchTerm(text);
+    applyFilters(attendanceRecords, filters, text);
+  };
+
+  const clearAllFilters = () => {
+    const clearedFilters = {
+      status: "all",
+      garbageType: "all",
+      routeName: "all",
+      driverName: "all",
+      scheduleDay: "all",
+      barangay: "all",
+    };
+    setFilters(clearedFilters);
+    setSearchTerm("");
+    applyFilters(attendanceRecords, clearedFilters, "");
+  };
+
+  const isAnyFilterActive = () => {
+    return Object.values(filters).some(filter => filter !== "all") || searchTerm;
+  };
+
+  const showToast = (message: string, type: "success" | "error" = "success") => {
+    toast.show({
+      placement: "top right",
+      render: ({ id }) => (
+        <AppToast
+          id={id}
+          type={type}
+          title={type === "success" ? "Success" : "Error"}
+          description={message}
+        />
+      ),
+    });
+  };
+
+  const capitalizeName = (name?: string) => {
+    if (!name) return "";
+    return name
+      .split(" ")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(" ");
+  };
+
+  const formatDriverName = (driver: any) => {
+    if (!driver) return "No driver assigned";
+    return `${capitalizeName(driver.first_name)} ${capitalizeName(driver.middle_name || "")} ${capitalizeName(driver.last_name)}`.trim();
+  };
+
+  const getBarangaysCovered = (attendance: AttendanceData) => {
+    if (!attendance?.schedule?.task) return [];
+    return attendance.schedule.task.map((task: any) => ({
+      id: task.barangay_id?._id,
+      name: task.barangay_id?.barangay_name || "Unknown Barangay",
+      status: task.status || "Pending"
+    }));
+  };
+
+  const getCurrentBarangays = (attendance: AttendanceData) => {
+    if (!attendance?.task) return [];
+    return attendance.task.map((task: any) => ({
+      id: task.barangay_id?._id,
+      name: task.barangay_id?.barangay_name || "Unknown Barangay",
+      status: task.status || "Pending"
+    }));
+  };
+
+  const areAllTasksCompleted = (attendance: AttendanceData): boolean => {
+    if (!attendance?.task || attendance.task.length === 0) return false;
+
+    // Check if every task has status "Completed"
+    return attendance.task.every((task: any) => task.status === "Complete");
+  };
+
+  const formatDateTime = (dateString: string) => {
+    if (!dateString) return "Not ended";
+    const date = new Date(dateString);
+    return date.toLocaleString();
+  };
+
+  const getDuration = (start: string, end: string) => {
+    if (!start || !end) return "In Progress";
+    const startTime = new Date(start).getTime();
+    const endTime = new Date(end).getTime();
+    const durationMs = endTime - startTime;
+    const minutes = Math.floor(durationMs / 60000);
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+
+    if (hours > 0) {
+      return `${hours}h ${remainingMinutes}m`;
+    }
+    return `${minutes}m`;
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status?.toLowerCase()) {
+      case 'active':
+        return '#10b981'; // green
+      case 'on route':
+        return '#3b82f6'; // blue
+      case 'complete':
+        return '#10b981'; // green
+      case 'in progress':
+        return '#f59e0b'; // orange
+      case 'pending':
+        return '#6b7280'; // gray
+      default:
+        return '#6b7280'; // gray
+    }
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch (status?.toLowerCase()) {
+      case 'active':
+        return <Activity size={16} color="#10b981" />;
+      case 'on route':
+        return <Truck size={16} color="#3b82f6" />;
+      case 'complete':
+        return <CheckCircle size={16} color="#10b981" />;
+      case 'in progress':
+        return <Clock size={16} color="#f59e0b" />;
+      case 'pending':
+        return <Clock size={16} color="#6b7280" />;
+      default:
+        return <Activity size={16} color="#6b7280" />;
+    }
+  };
+
+  // Custom Select Component
+  const CenteredSelect = ({
+    value,
+    onValueChange,
+    items,
+    placeholder,
+    label,
+    displayNames = null
+  }: any) => {
+    const [isOpen, setIsOpen] = useState(false);
+
+    const getDisplayName = (item: string) => {
+      if (item === "all") return placeholder;
+      if (displayNames && displayNames.has(item)) {
+        return displayNames.get(item);
+      }
+      return item;
+    };
+
+    return (
+      <>
+        <VStack space="sm" flex={1}>
+          <Text size="sm" fontWeight="$semibold">{label}</Text>
+          <TouchableOpacity onPress={() => setIsOpen(true)}>
+            <Box
+              flexDirection="row"
+              alignItems="center"
+              justifyContent="space-between"
+              borderWidth={1}
+              borderColor="$borderDark300"
+              borderRadius="$md"
+              p="$3"
+              bg="$white"
+            >
+              <Text>
+                {getDisplayName(value)}
+              </Text>
+              <Icon as={ChevronDown} size="sm" color="#6b7280" />
+            </Box>
+          </TouchableOpacity>
+        </VStack>
+
+        <Modal isOpen={isOpen} onClose={() => setIsOpen(false)}>
+          <ModalBackdrop />
+          <ModalContent
+            style={{
+              position: 'absolute',
+              width: width * 0.85,
+              maxHeight: height * 0.7,
+              margin: 'auto',
+            }}
+          >
+            <ModalHeader>
+              <Text fontWeight="$bold">{label}</Text>
+              <ModalCloseButton onPress={() => setIsOpen(false)}>
+                <Icon as={GluestackCloseIcon} />
+              </ModalCloseButton>
+            </ModalHeader>
+            <ModalBody>
+              <ScrollView showsVerticalScrollIndicator={false}>
+                {items.map((item: string) => (
+                  <TouchableOpacity
+                    key={item}
+                    onPress={() => {
+                      onValueChange(item);
+                      setIsOpen(false);
+                    }}
+                    style={{
+                      paddingVertical: 12,
+                      paddingHorizontal: 16,
+                      borderBottomWidth: 1,
+                      borderBottomColor: '#f1f1f1',
+                    }}
+                  >
+                    <Text
+                      color={value === item ? "$primary600" : "$textDark800"}
+                      fontWeight={value === item ? "$bold" : "$normal"}
+                    >
+                      {getDisplayName(item)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </ModalBody>
+          </ModalContent>
+        </Modal>
+      </>
+    );
+  };
+
+  return (
+    <ScrollView flex={1} bg="$white">
+      <VStack space="lg" p="$4">
+        {/* Header */}
+        <Box>
+          <Text size="xl" fontWeight="$bold">
+            Collector Attendance
+          </Text>
+          <Text color="#9ca3af">
+            {user?.barangay?.barangay_name 
+              ? `Showing records for ${user.barangay.barangay_name}`
+              : "Today's garbage collection attendance records"}
+          </Text>
+        </Box>
+
+        {/* Filter Panel */}
+        <Card>
+          <VStack space="sm">
+            <TouchableOpacity onPress={() => setShowFilters(!showFilters)}>
+              <HStack justifyContent="space-between" alignItems="center">
+                <HStack alignItems="center" space="sm">
+                  <Filter size={20} color="#6b7280" />
+                  <VStack>
+                    <Text fontWeight="$semibold">Filters & Search</Text>
+                    <Text size="sm" color="#6b7280">
+                      {isAnyFilterActive() ? "Active filters applied" : "Filter attendance records"}
+                    </Text>
+                  </VStack>
+                </HStack>
+                <HStack alignItems="center" space="sm">
+                  {isAnyFilterActive() && (
+                    <TouchableOpacity onPress={clearAllFilters}>
+                      <HStack alignItems="center" space="xs" bg="$red50" p="$2" rounded="$sm">
+                        <X size={14} color="#dc2626" />
+                        <Text size="sm" color="$red600">Clear</Text>
+                      </HStack>
+                    </TouchableOpacity>
+                  )}
+                  {showFilters ? <ChevronUp size={20} color="#6b7280" /> : <ChevronDown size={20} color="#6b7280" />}
+                </HStack>
+              </HStack>
+            </TouchableOpacity>
+
+            {showFilters && (
+              <VStack space="md" mt="$2">
+                {/* Search */}
+                <Input>
+                  <InputIcon as={Search} />
+                  <InputField
+                    placeholder="Search by truck ID, route, driver, barangay..."
+                    value={searchTerm}
+                    onChangeText={handleSearch}
+                  />
+                </Input>
+
+                {/* Filter Grid */}
+                <HStack space="sm">
+                  <CenteredSelect
+                    label="Truck Status"
+                    value={filters.status}
+                    onValueChange={(value: string) => handleFilterChange("status", value)}
+                    items={availableFilters.statuses}
+                    placeholder="Select Status"
+                  />
+                </HStack>
+
+                <HStack space="sm">
+                  <CenteredSelect
+                    label="Barangay"
+                    value={filters.barangay}
+                    onValueChange={(value: string) => handleFilterChange("barangay", value)}
+                    items={availableFilters.barangays}
+                    placeholder="Select Barangay"
+                    displayNames={barangayMap}
+                  />
+                </HStack>
+
+                <HStack space="sm">
+                  <CenteredSelect
+                    label="Garbage Type"
+                    value={filters.garbageType}
+                    onValueChange={(value: string) => handleFilterChange("garbageType", value)}
+                    items={availableFilters.garbageTypes}
+                    placeholder="Select Type"
+                  />
+                </HStack>
+
+                <HStack space="sm">
+                  <CenteredSelect
+                    label="Route Name"
+                    value={filters.routeName}
+                    onValueChange={(value: string) => handleFilterChange("routeName", value)}
+                    items={availableFilters.routeNames}
+                    placeholder="Select Route"
+                  />
+                </HStack>
+
+                <HStack space="sm">
+                  {/* Driver filter commented out as per your code */}
+                  {/* <CenteredSelect
+                    label="Driver"
+                    value={filters.driverName}
+                    onValueChange={(value: string) => handleFilterChange("driverName", value)}
+                    items={availableFilters.driverNames}
+                    placeholder="Select driver"
+                  /> */}
+                  
+                  <CenteredSelect
+                    label="Schedule Day"
+                    value={filters.scheduleDay}
+                    onValueChange={(value: string) => handleFilterChange("scheduleDay", value)}
+                    items={availableFilters.scheduleDays}
+                    placeholder="Select Day"
+                  />
+                </HStack>
+
+                {/* Active Filter Tags */}
+                {isAnyFilterActive() && (
+                  <VStack space="sm">
+                    <Text size="sm" fontWeight="$semibold">Active Filters:</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                      <HStack space="sm">
+                        {filters.status !== "all" && (
+                          <Badge action="error">
+                            <BadgeText>Status: {filters.status}</BadgeText>
+                            <TouchableOpacity onPress={() => handleFilterChange("status", "all")}>
+                              <X size={12} color="white" />
+                            </TouchableOpacity>
+                          </Badge>
+                        )}
+                        {filters.garbageType !== "all" && (
+                          <Badge action="info">
+                            <BadgeText>Type: {filters.garbageType}</BadgeText>
+                            <TouchableOpacity onPress={() => handleFilterChange("garbageType", "all")}>
+                              <X size={12} color="white" />
+                            </TouchableOpacity>
+                          </Badge>
+                        )}
+                        {filters.routeName !== "all" && (
+                          <Badge action="success">
+                            <BadgeText>Route: {filters.routeName}</BadgeText>
+                            <TouchableOpacity onPress={() => handleFilterChange("routeName", "all")}>
+                              <X size={12} color="white" />
+                            </TouchableOpacity>
+                          </Badge>
+                        )}
+                        {filters.driverName !== "all" && (
+                          <Badge action="warning">
+                            <BadgeText>Driver: {filters.driverName}</BadgeText>
+                            <TouchableOpacity onPress={() => handleFilterChange("driverName", "all")}>
+                              <X size={12} color="white" />
+                            </TouchableOpacity>
+                          </Badge>
+                        )}
+                        {filters.scheduleDay !== "all" && (
+                          <Badge>
+                            <BadgeText>Day: {filters.scheduleDay}</BadgeText>
+                            <TouchableOpacity onPress={() => handleFilterChange("scheduleDay", "all")}>
+                              <X size={12} color="white" />
+                            </TouchableOpacity>
+                          </Badge>
+                        )}
+                        {filters.barangay !== "all" && (
+                          <Badge bg="$purple200">
+                            <BadgeText color="$purple800">
+                              Barangay: {barangayMap.get(filters.barangay) || filters.barangay}
+                            </BadgeText>
+                            <TouchableOpacity onPress={() => handleFilterChange("barangay", "all")}>
+                              <X size={12} color="#7c3aed" />
+                            </TouchableOpacity>
+                          </Badge>
+                        )}
+                        {searchTerm && (
+                          <Badge bg="$gray200">
+                            <BadgeText color="$textDark800">Search: "{searchTerm}"</BadgeText>
+                            <TouchableOpacity onPress={() => setSearchTerm("")}>
+                              <X size={12} color="#6b7280" />
+                            </TouchableOpacity>
+                          </Badge>
+                        )}
+                      </HStack>
+                    </ScrollView>
+                  </VStack>
+                )}
+              </VStack>
+            )}
+          </VStack>
+        </Card>
+
+        {/* Results Summary */}
+        <Card bg="$gray100">
+          <HStack justifyContent="space-between" alignItems="center">
+            <Text>
+              Showing {filteredAttendance.length} of {attendanceRecords.length} attendance records
+            </Text>
+            {/* <Button size="sm" variant="outline" onPress={fetchAttendance} disabled={isLoading}>
+              <ButtonText>{isLoading ? "Loading..." : "Refresh"}</ButtonText>
+            </Button> */}
+          </HStack>
+        </Card>
+
+        {/* Attendance List */}
+        <VStack space="md" mb="$20">
+          <Text size="lg" fontWeight="$bold">
+            Collection Attendance ({filteredAttendance.length})
+          </Text>
+
+          {filteredAttendance.length === 0 ? (
+            <Card bg="$gray100">
+              <VStack space="sm" alignItems="center" p="$4">
+                <Truck size={48} color="#9ca3af" />
+                <Text fontWeight="$semibold">No attendance records found</Text>
+                <Text color="#6b7280" textAlign="center">
+                  {isAnyFilterActive()
+                    ? "Try adjusting your filters to find records"
+                    : "No attendance records available for today"}
+                </Text>
+                {isAnyFilterActive() && (
+                  <Button onPress={clearAllFilters} size="sm" mt="$2">
+                    <ButtonText>Clear Filters</ButtonText>
+                  </Button>
+                )}
+              </VStack>
+            </Card>
+          ) : (
+            filteredAttendance.map((attendance) => {
+              const barangays = getCurrentBarangays(attendance);
+              const scheduleBarangays = getBarangaysCovered(attendance);
+              const isCompleted = areAllTasksCompleted(attendance);
+              const duration = getDuration(attendance.started_at, attendance.ended_at);
+
+              return (
+                <TouchableOpacity
+                  key={attendance._id}
+                  onPress={() => setSelectedAttendance(attendance)}
+                >
+                  <Card bg={selectedAttendance?._id === attendance._id ? "$blue50" : "$white"}>
+                    <VStack space="sm">
+                      {/* Header with status */}
+                      <HStack justifyContent="space-between" alignItems="center">
+                        <HStack alignItems="center" space="sm">
+                          {/* {getStatusIcon(attendance.truck?.status)} */}
+                          <Text fontWeight="$bold">
+                            Truck: {attendance?.truck?.truck_id || "Unknown"}
+                          </Text>
+                        </HStack>
+                        <Badge
+                          bg={isCompleted ? "$green100" : "$red100"}
+                          borderColor={isCompleted ? "$green300" : "$red300"}
+                        >
+                          <BadgeText color={isCompleted ? "$green700" : "$red700"}>
+                            {isCompleted ? "Completed" : "Incomplete"}
+                          </BadgeText>
+                        </Badge>
+                      </HStack>
+
+                      {/* Route and garbage type */}
+                      <Text color="#6b7280">
+                        {attendance?.schedule?.route?.route_name || "No Route"} • {attendance.schedule?.garbage_type}
+                      </Text>
+
+                      <Divider />
+
+                      {/* Driver and schedule info */}
+                      <VStack space="xs">
+                        <HStack space="sm" alignItems="center">
+                          <User size={14} color="#6b7280" />
+                          <Text size="sm">
+                            Driver: {formatDriverName(attendance?.user)}
+                          </Text>
+                        </HStack>
+                        <HStack space="sm" alignItems="flex-start">
+                          <Calendar size={14} color="#6b7280" />
+                          <Text
+                            size="sm"
+                            flex={1}        // allows text to use remaining horizontal space
+                            flexWrap="wrap" // allows text to wrap onto multiple lines
+                          >
+                            Schedule: {Array.isArray(attendance.schedule?.recurring_day) && attendance.schedule.recurring_day.length > 0
+                              ? attendance.schedule.recurring_day
+                                .map((day: string) => day.charAt(0).toUpperCase() + day.slice(1))
+                                .join(", ")
+                              : "-"}
+                          </Text>
+                        </HStack>
+                        <HStack space="sm" alignItems="center">
+                          <Clock size={14} color="#6b7280" />
+                          <Text size="sm">
+                            Started: {new Date(attendance.started_at).toLocaleTimeString()}
+                          </Text>
+                        </HStack>
+                        {attendance.ended_at && (
+                          <HStack space="sm" alignItems="center">
+                            <Clock size={14} color="#6b7280" />
+                            <Text size="sm">
+                              Ended: {new Date(attendance.ended_at).toLocaleTimeString()}
+                            </Text>
+                          </HStack>
+                        )}
+                        <HStack space="sm" alignItems="center">
+                          <Activity size={14} color="#6b7280" />
+                          <Text size="sm">
+                            Duration: {duration}
+                          </Text>
+                        </HStack>
+                      </VStack>
+
+                      {/* Barangay progress */}
+                      {barangays.length > 0 && (
+                        <VStack space="xs" mt="$2">
+                          <Text size="sm" fontWeight="$medium">Collection Progress:</Text>
+                          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                            <HStack space="sm">
+                              {barangays.map((barangay: any, index: number) => (
+                                <Badge
+                                  key={index}
+                                  bg={
+                                    barangay.status === "Complete" ? "$green100" :
+                                      barangay.status === "In Progress" ? "$blue100" : "$gray100"
+                                  }
+                                  borderColor={
+                                    barangay.status === "Complete" ? "$green300" :
+                                      barangay.status === "In Progress" ? "$blue300" : "$gray300"
+                                  }
+                                >
+                                  <BadgeText
+                                    color={
+                                      barangay.status === "Complete" ? "$green700" :
+                                        barangay.status === "In Progress" ? "$blue700" : "$gray700"
+                                    }
+                                  >
+                                    {barangay.name}
+                                  </BadgeText>
+                                </Badge>
+                              ))}
+                            </HStack>
+                          </ScrollView>
+                          <Text size="xs" color="#6b7280">
+                            {barangays.filter(b => b.status === "Complete").length} of {barangays.length} barangays completed
+                          </Text>
+                        </VStack>
+                      )}
+
+                      {/* Contact info */}
+                      <Text size="sm">
+                        Contact: +63{attendance?.user?.contact_number || "N/A"}
+                      </Text>
+                    </VStack>
+                  </Card>
+                </TouchableOpacity>
+              );
+            })
+          )}
+        </VStack>
+
+        {/* Selected Attendance Modal */}
+        {selectedAttendance && (
+          <>
+            <Modal
+      isOpen={!!selectedAttendance}
+      onClose={() => setSelectedAttendance(null)}
+      // placement="bottom"
+      size="full"
+      // backdropStyle={{ backgroundColor: 'rgba(0,0,0,0.3)' }}
+    >
+      <Modal.Content
+        borderTopLeftRadius="$xl"
+        borderTopRightRadius="$xl"
+        maxHeight="90%"
+        bg="$white"
+        p="$4"
+      >
+        <VStack space="md">
+          {/* Header */}
+          <HStack justifyContent="space-between" alignItems="center">
+            <Text size="lg" fontWeight="$bold">
+              Attendance Details
+            </Text>
+            <TouchableOpacity
+              onPress={() => setSelectedAttendance(null)}
+              style={{
+                padding: 8,
+                backgroundColor: '#f3f4f6',
+                borderRadius: 8,
+              }}
+            >
+              <CloseIcon size={20} color="#6b7280" />
+            </TouchableOpacity>
+          </HStack>
+
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <VStack space="md">
+              {/* Basic Info */}
+              <Box bg="$gray100" p="$3" rounded="$md">
+                <VStack space="sm">
+                  <HStack justifyContent="space-between">
+                    <Text fontWeight="$semibold">Truck ID:</Text>
+                    <Text>{selectedAttendance?.truck?.truck_id || 'Unknown'}</Text>
+                  </HStack>
+                  <HStack justifyContent="space-between">
+                    <Text fontWeight="$semibold">Status:</Text>
+                    <Badge
+                      bg={
+                        selectedAttendance?.truck?.status === 'On Route'
+                          ? '$red100'
+                          : '$green100'
+                      }
+                    >
+                      <Text>
+                        {selectedAttendance?.truck?.status || 'Unknown'}
+                      </Text>
+                    </Badge>
+                  </HStack>
+                  <HStack justifyContent="space-between">
+                    <Text fontWeight="$semibold">Garbage Type:</Text>
+                    <Text>{selectedAttendance.schedule?.garbage_type || 'Unknown'}</Text>
+                  </HStack>
+                  <HStack justifyContent="space-between">
+                    <Text fontWeight="$semibold">Route Name:</Text>
+                    <Text>{selectedAttendance?.schedule?.route?.route_name || 'No Route'}</Text>
+                  </HStack>
+                </VStack>
+              </Box>
+
+              {/* Timing Info */}
+              <Box bg="$blue50" p="$3" rounded="$md">
+                <VStack space="sm">
+                  <Text fontWeight="$semibold" color="$blue700">
+                    Timing Information
+                  </Text>
+                  <HStack justifyContent="space-between">
+                    <Text color="$textDark600">Started At:</Text>
+                    <Text>{formatDateTime(selectedAttendance.started_at)}</Text>
+                  </HStack>
+                  <HStack justifyContent="space-between">
+                    <Text color="$textDark600">Ended At:</Text>
+                    <Text>
+                      {selectedAttendance.ended_at
+                        ? formatDateTime(selectedAttendance.ended_at)
+                        : 'Still in progress'}
+                    </Text>
+                  </HStack>
+                  <HStack justifyContent="space-between">
+                    <Text color="$textDark600">Duration:</Text>
+                    <Text fontWeight="$bold">
+                      {getDuration(selectedAttendance.started_at, selectedAttendance.ended_at)}
+                    </Text>
+                  </HStack>
+                </VStack>
+              </Box>
+
+              {/* Collection Status */}
+              <Box p="$3" rounded="$md" bg="$gray50">
+                <VStack space="sm">
+                  <Text fontWeight="$semibold">
+                    Current Collection Status ({getCurrentBarangays(selectedAttendance).length})
+                  </Text>
+                  {getCurrentBarangays(selectedAttendance).length > 0 ? (
+                    getCurrentBarangays(selectedAttendance).map((barangay, index) => (
+                      <HStack
+                        key={index}
+                        justifyContent="space-between"
+                        alignItems="center"
+                        bg="$gray100"
+                        p="$3"
+                        rounded="$md"
+                      >
+                        <VStack>
+                          <Text fontWeight="$medium">{barangay.name}</Text>
+                          <Text size="sm" color="#6b7280">
+                            Collection Status
+                          </Text>
+                        </VStack>
+                        <Badge
+                          bg={
+                            barangay.status === 'Complete'
+                              ? '$green100'
+                              : barangay.status === 'In Progress'
+                              ? '$blue100'
+                              : '$gray100'
+                          }
+                          borderColor={
+                            barangay.status === 'Complete'
+                              ? '$green300'
+                              : barangay.status === 'In Progress'
+                              ? '$blue300'
+                              : '$gray300'
+                          }
+                        >
+                          <Text
+                            color={
+                              barangay.status === 'Complete'
+                                ? '$green700'
+                                : barangay.status === 'In Progress'
+                                ? '$blue700'
+                                : '$gray700'
+                            }
+                          >
+                            {barangay.status}
+                          </Text>
+                        </Badge>
+                      </HStack>
+                    ))
+                  ) : (
+                    <Text size="sm" color="#6b7280" fontStyle="italic">
+                      No barangay collection status available
+                    </Text>
+                  )}
+                </VStack>
+              </Box>
+
+              {/* Schedule Info */}
+              <Box bg="$purple50" p="$3" rounded="$md">
+                <VStack space="sm">
+                  <Text fontWeight="$semibold" color="$purple700">
+                    Schedule Information
+                  </Text>
+                  <HStack justifyContent="space-between" alignItems="flex-start">
+                    <Text color="$textDark600">Schedule Days:</Text>
+                    <Text flex={1} textAlign="right" flexWrap="wrap">
+                      {Array.isArray(selectedAttendance.schedule?.recurring_day) &&
+                      selectedAttendance.schedule.recurring_day.length > 0
+                        ? selectedAttendance.schedule.recurring_day
+                            .map(day => day.charAt(0).toUpperCase() + day.slice(1))
+                            .join(', ')
+                        : '-'}
+                    </Text>
+                  </HStack>
+                  <HStack justifyContent="space-between" alignItems="center">
+                    <Text color="$textDark600">Schedule Status:</Text>
+                    <Badge
+                      bg={
+                        selectedAttendance.schedule?.status === 'Scheduled'
+                          ? '$green100'
+                          : selectedAttendance.schedule?.status === 'Completed'
+                          ? '$blue100'
+                          : '$gray100'
+                      }
+                      borderColor={
+                        selectedAttendance.schedule?.status === 'Scheduled'
+                          ? '$green300'
+                          : selectedAttendance.schedule?.status === 'Completed'
+                          ? '$blue300'
+                          : '$gray300'
+                      }
+                    >
+                      <Text
+                        color={
+                          selectedAttendance.schedule?.status === 'Scheduled'
+                            ? '$green700'
+                            : selectedAttendance.schedule?.status === 'Completed'
+                            ? '$blue700'
+                            : '$gray700'
+                        }
+                      >
+                        {selectedAttendance.schedule?.status || 'Unknown'}
+                      </Text>
+                    </Badge>
+                  </HStack>
+                </VStack>
+              </Box>
+
+              {/* Driver Info */}
+              {selectedAttendance?.user && (
+                <Box bg="$green50" p="$3" rounded="$md">
+                  <VStack space="sm">
+                    <Text fontWeight="$semibold" color="$green700">
+                      Driver Information
+                    </Text>
+                    <VStack space="xs">
+                      <HStack justifyContent="space-between">
+                        <Text color="$textDark600">Name:</Text>
+                        <Text>{formatDriverName(selectedAttendance.user)}</Text>
+                      </HStack>
+                      <HStack justifyContent="space-between">
+                        <Text color="$textDark600">Contact:</Text>
+                        <Text>+63{selectedAttendance.user.contact_number}</Text>
+                      </HStack>
+                      <HStack justifyContent="space-between">
+                        <Text color="$textDark600">Gender:</Text>
+                        <Text>
+                          {selectedAttendance.user.gender
+                            ? selectedAttendance.user.gender.charAt(0).toUpperCase() +
+                              selectedAttendance.user.gender.slice(1)
+                            : 'Not specified'}
+                        </Text>
+                      </HStack>
+                      <HStack justifyContent="space-between">
+                        <Text color="$textDark600">Email:</Text>
+                        <Text>{selectedAttendance.user.email || 'N/A'}</Text>
+                      </HStack>
+                    </VStack>
+                  </VStack>
+                </Box>
+              )}
+            </VStack>
+          </ScrollView>
+        </VStack>
+      </Modal.Content>
+    </Modal>
+          </>
+        )}
+      </VStack>
+    </ScrollView>
+  );
+}

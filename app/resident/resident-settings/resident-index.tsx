@@ -165,7 +165,7 @@ export default function ResidentSettingsScreen() {
                 </Text>
 
                 {/* Location Status */}
-                <HStack space="sm" alignItems="center" mt="$1">
+                {/* <HStack space="sm" alignItems="center" mt="$1">
                   <Box
                     w="$2"
                     h="$2"
@@ -175,7 +175,7 @@ export default function ResidentSettingsScreen() {
                   <Text size="xs" color={locationStatus.color}>
                    1 Pickup Location: {locationStatus.status}
                   </Text>
-                </HStack>
+                </HStack> */}
 
                 {/* Show Coordinates if available */}
                 {user?.position?.lat && user?.position?.lng && (
@@ -208,7 +208,7 @@ export default function ResidentSettingsScreen() {
                     </HStack>
                   </Button>
                 </Link>
-                <Button
+                {/* <Button
                   variant="outline"
                   justifyContent="flex-start"
                   action="secondary"
@@ -223,7 +223,7 @@ export default function ResidentSettingsScreen() {
                       </Text>
                     </VStack>
                   </HStack>
-                </Button>
+                </Button> */}
                 <Link href="/resident/resident-settings/resident-login_history" asChild>
                   <Button
                     variant="outline"
@@ -236,23 +236,13 @@ export default function ResidentSettingsScreen() {
                     </HStack>
                   </Button>
                 </Link>
-                <Button
-                  variant="outline"
-                  justifyContent="flex-start"
-                  action="secondary"
-                >
-                  <HStack space="md" alignItems="center">
-                    <Bell size={20} color="#666" />
-                    <Text>Notification Preferences</Text>
-                  </HStack>
-                </Button>
               </VStack>
             </Box>
 
             <Divider />
 
             {/* App Settings */}
-            <Box>
+            {/* <Box>
               <Text fontWeight="$bold" mb="$2" color="$secondary500" size="sm">
                 APP
               </Text>
@@ -279,7 +269,7 @@ export default function ResidentSettingsScreen() {
                   </HStack>
                 </Button>
               </VStack>
-            </Box>
+            </Box> */}
 
             <Divider />
 

@@ -10,6 +10,7 @@ import {
   Flag,
   History,
   MapPin,
+  Truck,
   Home,
   Settings as SettingsIcon,
 } from "lucide-react-native";
@@ -69,6 +70,15 @@ export default function ResidentLayout() {
             tabBarIcon: ({ color, size }) => (
               <MapPin color={color} size={size} />
             ),
+          }}
+        />
+
+        <Tabs.Screen
+          name="resident-truck_logs"
+          options={{
+            title: "Truck Logs",
+            tabBarLabel: "Logs",
+            tabBarIcon: ({ color, size }) => <Truck color={color} size={size} />,
           }}
         />
 

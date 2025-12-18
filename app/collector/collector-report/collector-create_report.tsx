@@ -1,4 +1,4 @@
-import { Box, Button, Input, InputField, ScrollView, Select, SelectBackdrop, SelectContent, SelectDragIndicator, SelectDragIndicatorWrapper, SelectInput, SelectItem, SelectPortal, SelectTrigger, Text, Textarea, TextareaInput, VStack } from '@gluestack-ui/themed';
+import { Box, Button, Input, InputField, useToast, ScrollView, Select, SelectBackdrop, SelectContent, SelectDragIndicator, SelectDragIndicatorWrapper, SelectInput, SelectItem, SelectPortal, SelectTrigger, Text, Textarea, TextareaInput, VStack } from '@gluestack-ui/themed';
 import React, { useState, useContext } from 'react';
 import { AuthContext } from '../../../context/AuthContext';
 import { useOffline } from '../../../context/OfflineContext';
@@ -7,6 +7,13 @@ import { Report } from '../../../types';
 import { useRouter } from "expo-router";
 
 import { createCollectorReport } from "../../../hooks/report_hook";
+import { getAllTruckSpecificUser } from "../../../hooks/truck_hook";
+
+
+
+import { AppToast } from "@/components/ui/AppToast";
+
+
 import { useLocation } from '@/context/LocationContext';
 import { useFocusEffect } from "@react-navigation/native";
 
@@ -16,25 +23,55 @@ interface ReportFormData {
   report_type: string;
 }
 
+interface TruckData {
+  _id: string;
+  [key: string]: any;
+}
+
 export default function CollectorCreateReportScreen() {
+  const toast = useToast();
   const { user } = useContext(AuthContext)!;
   const { addPendingAction, isOnline } = useOffline();
   const router = useRouter();
+  const [trucks, setTrucks] = useState<TruckData[]>([]);
   const [formData, setFormData] = useState<ReportFormData>({
     notes: '',
     specific_issue: 'vehicle_issue',
     report_type: 'uncollected'
   });
   const [loading, setLoading] = useState<boolean>(false);
-  const { connectWebSocket, fetchTodayScheduleRecords } = useLocation();
+  const { connectWebSocket } = useLocation();
 
 
   useFocusEffect(
     React.useCallback(() => {
       connectWebSocket();
-      fetchTodayScheduleRecords();
+      fetchTrucks();
     }, [])
   );
+
+  const fetchTrucks = async () => {
+    try {
+      const { data, success } = await getAllTruckSpecificUser(user?._id || "");
+      
+      if (success === true) {
+        setTrucks(data.data);
+      }
+    } catch (error) {
+      console.log(error)
+      toast.show({
+        placement: "top right",
+        render: ({ id }) => (
+          <AppToast
+            id={id}
+            type="error"
+            title="Error"
+            description="Failed to load garbage report."
+          />
+        ),
+      });
+    }
+  };
 
 
   const handleSubmit = async (): Promise<void> => {
@@ -54,7 +91,7 @@ export default function CollectorCreateReportScreen() {
       if (isOnline) {
         const input_data = {
           user: user?._id,
-          truck: user?._id,
+          truck: trucks[0]?._id,
           latitude: user?.garbage_site?.position?.lat || '10.123',
           longitude: user?.garbage_site?.position?.lng || '124.123',
           notes: formData?.notes || undefined,
@@ -142,9 +179,9 @@ export default function CollectorCreateReportScreen() {
                   <SelectItem label="Mechanical Failure" value="mechanical_failure" />
                   <SelectItem label="Equipment Malfunction" value="equipment_malfunction" />
                   <SelectItem label="Route Blocked" value="route_blocked" />
-                  <SelectItem label="Road Condition" value="road_condition" />
+                  {/* <SelectItem label="Road Condition" value="road_condition" />
                   <SelectItem label="Weather Hazard" value="weather_hazard" />
-                  <SelectItem label="Safety Concern" value="safety_concern" />
+                  <SelectItem label="Safety Concern" value="safety_concern" /> */}
                   <SelectItem label="Other" value="other" />
                 </SelectContent>
               </SelectPortal>

@@ -54,7 +54,7 @@ export default function CollectorProfileScreen() {
   const { user, updateProfile, refresh } = useContext(AuthContext)!;
   const { isOnline } = useOffline();
   const router = useRouter();
-  const { connectWebSocket, fetchTodayScheduleRecords } = useLocation();
+  const { connectWebSocket } = useLocation();
 
   const [formData, setFormData] = useState<ProfileFormData>({
     first_name: user?.first_name || "",
@@ -71,7 +71,6 @@ export default function CollectorProfileScreen() {
   useFocusEffect(
     React.useCallback(() => {
       connectWebSocket();
-      fetchTodayScheduleRecords();
     }, [])
   );
 

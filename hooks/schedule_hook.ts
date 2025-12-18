@@ -34,6 +34,18 @@ export const getAllScheduleSpecifcBarangay = async (barangay_id  : string) => {
 };
 
 
+export const getAllSchedule = async () => {
+  try {
+    const res = await API.getAllSchedule();
+
+    return { data: res.data, success: true };
+  } catch (error) {
+    // console.error("Failed to register user:", error);
+    throw error;
+  }
+};
+
+
 export const getTodayScheduleSpecificUser = async (user_id  : string) => {
   try {
     const res = await API.getTodayScheduleSpecificUser(user_id);
